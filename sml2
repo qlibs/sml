@@ -1,0 +1,832 @@
+//
+// Copyright (c) 2023 Kris Jusiak (kris at jusiak dot net)
+//
+// Distributed under the Boost Software License, Version 1.0.
+// (See accompanying file LICENSE_1_0.txt or copy at
+// http://www.boost.org/LICENSE_1_0.txt)
+//
+#if __cplusplus < 202002L
+#error "SML2 requires C++20 support (Clang-15+, GCC-12+)"
+#else
+#if defined(__cpp_modules)
+export module sml;
+export  // namespace
+#else
+#ifndef SML2
+#define SML2 2'0'0
+#pragma GCC system_header  // -Wnon-template-friend
+#endif
+
+/**
+ * SML2
+ *   C++20 single header/module - https://raw.githubusercontent.com/boost-ext/sml2/main/sml2
+ *   No dependencies (Neither Boost nor STL is required)
+       * No 'virtual' used (-fno-rtti)
+       * No `exceptions` required (-fno-exceptions)
+ *   Library tests itself at compile-time upon include/import
+       * Basically guaranteed no UB, no leaks
+ *   Optimized run-time execution (Zero overhead)
+       * https://godbolt.org/z/y99L50
+ *   Fast compilation times
+ *   Declarative Domain Specific Language (DSL)
+ */
+namespace sml::inline v_2_0_0 {  // should match SML2 version
+namespace meta {
+template <auto Value>
+struct bool_constant {
+  static constexpr auto value = Value;
+};
+template <int...>
+struct index_sequence {
+  using type = index_sequence;
+};
+#if __has_builtin(__make_integer_seq)
+template <class T, T...>
+struct integer_sequence;
+template <int... Ns>
+struct integer_sequence<int, Ns...> {
+  using type = index_sequence<Ns...>;
+};
+template <int N>
+struct make_index_sequence_impl {
+  using type = typename __make_integer_seq<integer_sequence, int, N>::type;
+};
+#else
+template <class, class>
+struct concat;
+template <int... I1, int... I2>
+struct concat<index_sequence<I1...>, index_sequence<I2...>> : index_sequence<I1..., (sizeof...(I1) + I2)...> {};
+template <int N>
+struct make_index_sequence_impl
+    : concat<typename make_index_sequence_impl<N / 2>::type, typename make_index_sequence_impl<N - N / 2>::type>::type {};
+template <>
+struct make_index_sequence_impl<0> : index_sequence<> {};
+template <>
+struct make_index_sequence_impl<1> : index_sequence<0> {};
+#endif
+template <int N>
+using make_index_sequence = typename make_index_sequence_impl<N>::type;
+
+template <class T>
+auto declval() -> T&&;
+
+template <auto N>
+struct fixed_hash_string {
+  static constexpr auto size = N;
+
+  constexpr fixed_hash_string() = default;
+  constexpr explicit(false) fixed_hash_string(const char (&str)[N + 1]) {
+    for (auto i = 0u; i < N; ++i) {
+      data[i] = str[i];
+      (hash ^= data[i]) <<= 1;
+    }
+  }
+
+  constexpr auto operator*() const {
+    fixed_hash_string<N + 1> str{};
+    str.data[0] = '*';
+    for (auto i = 0u; i < N; ++i) {
+      str.data[i + 1] = data[i];
+      (str.hash ^= str.data[i + 1]) <<= 1;
+    }
+    return str;
+  }
+
+  char data[N + 1]{};
+  unsigned hash{};
+};
+
+template <auto N>
+fixed_hash_string(const char (&str)[N]) -> fixed_hash_string<N - 1>;
+
+template <class, auto>
+struct counters {
+  friend auto get(counters);
+  template <auto N>
+  struct set {
+    friend auto get(counters) { return N; }
+  };
+};
+
+template <class T, auto Tag, unsigned Next = 0>
+[[nodiscard]] consteval auto counter_impl() {
+  if constexpr (requires { get(counters<T, Next>{}); }) {
+    return counter_impl<T, Tag, Next + 1>();
+  } else {
+    return Next;
+  }
+}
+
+template <class T, auto Tag = [] {}, auto N = counter_impl<T, Tag>()>
+constexpr auto counter = N;
+
+template <class...>
+struct append;
+template <template <class...> class TList, class... Ts, class T>
+struct append<TList<Ts...>, T> {
+  using type = TList<T, Ts...>;
+};
+template <class TList, class T>
+using append_t = typename append<TList, T>::type;
+template <class...>
+struct list {};
+template <class, auto>
+struct mappings {
+  friend auto get(mappings);
+  template <class T>
+  struct set {
+    friend auto get(mappings) { return T{}; }
+  };
+};
+}  // namespace meta
+
+namespace back {
+template <class... Ts>
+struct pool : Ts... {
+  constexpr explicit(true) pool(Ts... ts) : Ts{ts}... {}
+};
+
+template <class...>
+struct transitions {};
+
+template <class TEvent, class T, auto Counter>
+constexpr auto insert() -> void {
+  if constexpr (requires { get(meta::mappings<TEvent, Counter>{}); }) {
+    using joined = meta::append_t<decltype(get(meta::mappings<TEvent, Counter>{})), T>;
+    void(typename meta::mappings<TEvent, Counter + 1u>::template set<joined>{});
+    void(typename meta::counters<TEvent, Counter>::template set<Counter + 1>{});
+  } else {
+    void(typename meta::mappings<TEvent, Counter>::template set<transitions<T>>{});
+  }
+}
+
+template <class TUnique, class T, template <class...> class TList, class... TEvents>
+constexpr auto transition(TList<TEvents...>) {
+  (insert<TEvents(TUnique), T, meta::counter<TEvents(TUnique)>>(), ...);
+}
+
+template <class...>
+class sm;
+template <template <class...> class TList, class... Transitions, class TUnique>
+class sm<TList<Transitions...>, TUnique> {
+  static_assert(((transition<TUnique, Transitions>(typename Transitions::event{}), ...), true));
+  static constexpr auto num_of_regions = ((Transitions::src.data[0] == '*') + ...);
+  using state_t = unsigned;
+
+ public:
+  constexpr explicit(true) sm(const auto& transition_table) : transition_table_{transition_table} {
+    const state_t states[]{(Transitions::src.data[0] == '*' ? Transitions::src.hash : 0u)...};
+    for (auto* current_state = &current_state_[0]; auto state : states) {
+      if (state) {
+        *current_state++ = state;
+      }
+    }
+  }
+
+  template <class TEvent, class Ts = decltype(get(meta::mappings<TEvent(TUnique), meta::counter<TEvent(TUnique)>>{}))>
+  constexpr auto process_event(const TEvent& event, auto&&... args) -> bool {
+    if constexpr (const auto transitions = Ts{}; num_of_regions == 0u) {
+      return process_event_0<TEvent>(event, transitions, args...);
+    } else if constexpr (num_of_regions == 1u) {
+      return process_event_1<TEvent>(event, current_state_[0], transitions, args...);
+    } else {
+      return process_event_N<TEvent>(event, transitions, meta::make_index_sequence<num_of_regions>{}, args...);
+    }
+  }
+
+  [[nodiscard]] constexpr auto is(auto... states) const -> bool
+    requires(num_of_regions > 0u)
+  {
+    unsigned i{};
+    return ((states.src.hash == current_state_[i++]) and ...);
+  }
+
+ private:
+  template <class TEvent, class T>
+  constexpr auto process_event_0(const TEvent& event, transitions<T>, auto&&... args) -> bool {
+    state_t arg{};
+    return static_cast<T&>(transition_table_)(event, arg, *this, args...);
+  }
+
+  template <class TEvent, class... Ts>
+  constexpr auto process_event_0(const TEvent& event, transitions<Ts...>, auto&&... args) -> bool {
+    return (process_event_0(event, transitions<Ts>{}, args...) or ...);
+  }
+
+  template <class TEvent, class T>
+  constexpr auto process_event_1(const TEvent& event, auto& current_state, transitions<T>, auto&&... args) -> bool {
+    return (T::src.hash == current_state or not T::src.hash) and
+           static_cast<T&>(transition_table_)(event, current_state, *this, args...);
+  }
+
+  template <class TEvent, class... Ts>
+  constexpr auto process_event_1(const TEvent& event, auto& current_state, transitions<Ts...>, auto&&... args) -> bool {
+    return (process_event_1(event, current_state, transitions<Ts>{}, args...) or ...);
+  }
+
+  template <class TEvent, auto... Rs>
+  constexpr auto process_event_N(const TEvent& event, const auto& transitions, meta::index_sequence<Rs...>, auto&&... args)
+      -> bool {
+    return (process_event_1<TEvent>(event, current_state_[Rs], transitions, args...) or ...);
+  }
+
+  [[no_unique_address]] TList<Transitions...> transition_table_{};
+  [[no_unique_address]] state_t current_state_[not num_of_regions ? 1 : num_of_regions]{};
+};
+}  // namespace back
+
+namespace front {
+namespace concepts {
+struct invocable_base {
+  void operator()();
+};
+template <class T>
+struct invocable_impl : T, invocable_base {};
+template <class T>
+concept invocable = not requires { &invocable_impl<T>::operator(); };
+}  // namespace concepts
+
+[[nodiscard]] constexpr auto invoke(const auto& fn, const auto& event, auto& self, auto&&... args) {
+  if constexpr (requires { fn(event, args...); }) {
+    return fn(event, args...);
+  } else if constexpr (requires { fn(event); }) {
+    return fn(event);
+  } else if constexpr (requires { fn(self, event, args...); }) {
+    return fn(self, event, args...);
+  } else {
+    return fn();
+  }
+}
+
+namespace detail {
+constexpr auto none = [] {};
+constexpr auto always = [] { return true; };
+}  // namespace detail
+
+template <meta::fixed_hash_string Src = "", class TEvent = decltype(detail::none), class TGuard = decltype(detail::always),
+          class TAction = decltype(detail::none), meta::fixed_hash_string Dst = "">
+struct transition {
+  static constexpr auto src = Src;
+  static constexpr auto dst = Dst;
+  using event = TEvent;
+
+  [[nodiscard]] constexpr auto operator*() const {
+    return transition<*Src, TEvent, TGuard, TAction, Dst>{.guard = guard, .action = action};
+  }
+
+  template <class T>
+  [[nodiscard]] constexpr auto operator+(const T& t) const {
+    return transition<Src, typename T::event, decltype(T::guard), decltype(T::action)>{.guard = t.guard, .action = t.action};
+  }
+
+  template <class T>
+  [[nodiscard]] constexpr auto operator[](const T& guard) const {
+    return transition<Src, TEvent, T>{.guard = guard, .action = action};
+  }
+
+  template <class T>
+  [[nodiscard]] constexpr auto operator/(const T& action) const {
+    return transition<Src, TEvent, TGuard, T>{.guard = guard, .action = action};
+  }
+
+  template <class T>
+  [[nodiscard]] constexpr auto operator=(const T&) const {
+    return transition<src, TEvent, TGuard, TAction, T::src>{.guard = guard, .action = action};
+  }
+
+  [[nodiscard]] constexpr auto operator()(const auto& event, [[maybe_unused]] auto& current_state, auto& self, auto&&... args)
+      -> bool {
+    using R = decltype(invoke(guard, event, self, args...));
+    if constexpr (requires { R::value; }) {
+      if constexpr (R::value) {
+        if constexpr (dst.size) {
+          current_state = dst.hash;
+        }
+        invoke(action, event, self, args...);
+        return true;
+      }
+    } else {
+      if (invoke(guard, event, self, args...)) {
+        if constexpr (dst.size) {
+          current_state = dst.hash;
+        }
+        invoke(action, event, self, args...);
+        return true;
+      }
+    }
+    return false;
+  }
+
+  [[no_unique_address]] TGuard guard;
+  [[no_unique_address]] TAction action;
+};
+
+template <class... TEvents>
+constexpr auto event = transition<"", meta::list<TEvents...>>{};
+template <meta::fixed_hash_string Str>
+constexpr auto operator""_s() {
+  return transition<Str>{};
+}
+
+[[nodiscard]] constexpr auto operator,(const concepts::invocable auto& lhs, const concepts::invocable auto& rhs) {
+  return [=](auto& self, const auto& event, auto&&... args) {
+    invoke(lhs, event, self, args...);
+    invoke(rhs, event, self, args...);
+  };
+}
+[[nodiscard]] constexpr auto operator and(const concepts::invocable auto& lhs, const concepts::invocable auto& rhs) {
+  return [=](auto& self, const auto& event, auto&&... args) {
+    return invoke(lhs, event, self, args...) and invoke(rhs, event, self, args...);
+  };
+}
+[[nodiscard]] constexpr auto operator or(const concepts::invocable auto& lhs, const concepts::invocable auto& rhs) {
+  return [=](auto& self, const auto& event, auto&&... args) {
+    return invoke(lhs, event, self, args...) or invoke(rhs, event, self, args...);
+  };
+}
+[[nodiscard]] constexpr auto operator not(const concepts::invocable auto& t) {
+  return [=](auto& self, const auto& event, auto&&... args) { return not invoke(t, event, self, args...); };
+}
+}  // namespace front
+
+template <class T, class TUnique = decltype([]() -> bool { return true; })>
+struct sm final : back::sm<decltype(meta::declval<T>()()), TUnique> {
+  constexpr explicit(false) sm(T t) : back::sm<decltype(meta::declval<T>()()), TUnique>{t()} {}
+};
+template <class T>
+sm(T&&) -> sm<T>;
+
+namespace dsl {
+template <class... Ts>
+struct transition_table : back::pool<Ts...> {
+  constexpr explicit(false) transition_table(Ts... ts) : back::pool<Ts...>{ts...} {}
+  static_assert(((Ts::src.data[0] == '*') + ...) >= 1, "[E001] At least one `*state` aka orthogonal region is required!");
+};
+template <class... Ts>
+struct dispatch_table : back::pool<Ts...> {
+  constexpr explicit(false) dispatch_table(Ts... ts) : back::pool<Ts...>{ts...} {}
+};
+using front::event;
+using front::operator""_s;
+using front::operator, ;
+using front::operator not;
+using front::operator and;
+using front::operator or;
+constexpr auto otherwise = [] { return true; };
+constexpr auto _ = ""_s;   // any state
+constexpr auto X = "X"_s;  // terminate state
+constexpr auto process = [](const auto& event) {
+  return [event](auto& self, const auto&, auto&&...) { self.process_event(event); };
+};
+}  // namespace dsl
+}  // namespace sml::inline v_2_0_0
+
+/**
+ * Tests
+ */
+
+static_assert(
+    [] {
+      using namespace sml;
+
+      struct e1 {};
+
+      struct tt {
+        constexpr auto operator()() const {
+          using namespace dsl;
+          return transition_table{
+              *"s1"_s + event<e1> = "s2"_s,
+          };
+        }
+      };
+
+      using dsl::operator""_s;
+
+      tt t;
+      sm sm1{t};
+      sm sm2{tt{}};
+      return sm1.is("s1"_s) and sm1.process_event(e1{}) and sm1.is("s2"_s) and sm2.is("s1"_s) and sm2.process_event(e1{}) and sm2.is("s2"_s);
+    }(),
+    "feature.ctor");
+
+static_assert(
+    [] {
+      using namespace sml;
+
+      struct e1 {};
+
+      sm sm = [] {
+        using namespace dsl;
+        return transition_table{
+            *"s1"_s + event<e1> = "s2"_s,
+        };
+      };
+
+      using dsl::operator""_s;
+      return sm.process_event(e1{}) and sm.is("s2"_s);
+    }(),
+    "feature.process_event");
+
+static_assert(
+    [] {
+      using namespace sml;
+
+      struct e1 {};
+
+      sm sm = [] {
+        using namespace dsl;
+        return transition_table{
+            *"s1"_s + event<e1> = "s2"_s,
+            "s2"_s + event<e1> = "s3"_s,
+        };
+      };
+
+      using dsl::operator""_s;
+      return sm.process_event(e1{}) and sm.is("s2"_s) and sm.process_event(e1{}) and sm.is("s3"_s);
+    }(),
+    "feature.process_event[same event multiple times]");
+
+static_assert(
+    [] {
+      using namespace sml;
+
+      struct e {
+        int value{};
+      };
+      unsigned value{};
+
+      sm sm = [&] {
+        using namespace dsl;
+        auto action = [&](const auto& event, auto... args) { value += event.value + (args + ...); };
+        return transition_table{
+            *"s1"_s + event<e> / action,
+        };
+      };
+
+      using dsl::operator""_s;
+      return sm.process_event(e{.value = 1}, 2, 3) and 6 == value;
+    }(),
+    "feature.process_event[with parameters]");
+
+static_assert(
+    [] {
+      using namespace sml;
+
+      struct e1 {};
+      struct e2 {};
+      struct e {
+        int value{};
+      };
+
+      sm sm = [] {
+        using namespace dsl;
+        return transition_table{
+            *"s1"_s + event<e1> = "s2"_s,
+            "s2"_s + event<e2> = "s3"_s,
+            "s3"_s + event<e2> = X,
+            _ + event<e> = "s1"_s,
+        };
+      };
+
+      using dsl::operator""_s;
+
+      return sm.process_event(e1{}) and sm.is("s2"_s) and
+
+             sm.process_event(e{{}}) and                       // _ -> s1
+             sm.is("s1"_s) and not sm.process_event(e2{}) and  // ignored
+             sm.is("s1"_s) and
+
+             sm.process_event(e1{}) and  // s1 -> s2
+             sm.is("s2"_s) and
+
+             sm.process_event(e2{}) and  // s2 -> s3
+             sm.is("s3"_s) and
+
+             sm.process_event(e{}) and  // _ -> s1
+             sm.is("s1"_s);
+    }(),
+    "feature.process_event[different events in any state]");
+
+static_assert(
+    [] {
+      using namespace sml;
+      struct unexpected {};
+      struct e1 {};
+
+      sm sm = [] {
+        using namespace dsl;
+        return transition_table{
+            *"s1"_s + event<e1> = "s2"_s,
+        };
+      };
+
+      constexpr auto process_event = [](auto event) { return requires { sm.process_event(event); }; };
+
+      static_assert(process_event(e1{}));
+      static_assert(not process_event(unexpected{}));
+      return true;
+    }(),
+    "feature.proces_event[unexpected event]");
+
+static_assert(
+    [] {
+      using namespace sml;
+
+      struct e1 {};
+      struct e2 {};
+
+      const auto tt = [] {
+        using namespace dsl;
+        return transition_table{
+            *"s1"_s + event<e1, e2> = "s2"_s,
+        };
+      };
+
+      using dsl::operator""_s;
+
+      return [&] {
+        sm sm{tt};
+        return sm.is("s1"_s) and sm.process_event(e1{}) and sm.is("s2"_s);
+      }() and [&] {
+        sm sm{tt};
+        return sm.is("s1"_s) and sm.process_event(e2{}) and sm.is("s2"_s);
+      }();
+    }(),
+    "feature.events[multiple events]");
+
+static_assert(
+    [] {
+      using namespace sml;
+
+      struct e1 {};
+      struct e2 {};
+
+      sm sm = [] {
+        using namespace dsl;
+        return transition_table{
+            *"s1"_s + event<e1> = "s2"_s,
+            "s2"_s + event<e2> = "s1"_s,
+        };
+      };
+
+      using dsl::operator""_s;
+
+      return sm.is("s1"_s) and sm.process_event(e1{}) and sm.is("s2"_s) and not sm.process_event(e1{}) and sm.is("s2"_s) and
+             sm.process_event(e2{}) and sm.is("s1"_s);
+    }(),
+    "feature.transition_table[multiple transitions]");
+
+static_assert(
+    [] {
+      using namespace sml;
+
+      struct e1 {};
+
+      sm sm = [] {
+        using namespace dsl;
+        return transition_table{
+            *"s1"_s + event<e1> = X,
+        };
+      };
+
+      using dsl::operator""_s;
+      using dsl::X;
+      return sm.is("s1"_s) and sm.process_event(e1{}) and sm.is(X) and not sm.process_event(e1{});
+    }(),
+    "feature.transition_table[terminated state]");
+
+static_assert(
+    [] {
+      using namespace sml;
+
+      struct e {
+        int value;
+      };
+
+      unsigned calls{};
+
+      sm sm = [&] {
+        using namespace dsl;
+        auto guard = [](const auto& event) { return event.value; };
+        auto action = [&] { ++calls; };
+        return transition_table{
+            *"s1"_s + event<e>[guard and (guard or guard)] / (action, action) = "s2"_s,
+        };
+      };
+
+      using dsl::operator""_s;
+      return not sm.process_event(e{false}) and sm.is("s1"_s) and sm.process_event(e{true}) and sm.is("s2"_s);
+    }(),
+    "feature.transition_table[guards/actions]");
+
+static_assert(
+    [] {
+      using namespace sml;
+
+      struct e {
+        int value{};
+      };
+
+      sm sm = [&] {
+        using namespace dsl;
+        constexpr auto guard = [](const auto& event) { return event.value; };
+        return transition_table{
+            *"s1"_s + event<e>[guard] = "s2"_s,
+            "s1"_s + event<e>[otherwise] = "s3"_s,
+        };
+      };
+
+      using dsl::operator""_s;
+      return sm.process_event(e{false}) and sm.is("s3"_s);
+    }(),
+    "feature.transition_table[otherwise guard]");
+
+static_assert(
+    [] {
+      using namespace sml;
+
+      struct e1 {
+        int value{};
+      };
+      struct e2 {};
+
+      unsigned value{};
+
+      sm sm = [&] {
+        using namespace dsl;
+        auto ct_guard = [](const auto& event) { return sml::meta::bool_constant<requires { event.value; }>{}; };
+        auto action = [&](const auto& event) { value += event.value; };
+        return transition_table{
+            *"s1"_s + event<e1>[ct_guard] / action,
+            "s1"_s + event<e2>[ct_guard] / action,
+        };
+      };
+
+      using dsl::operator""_s;
+      return 0 == value and sm.process_event(e1{.value = 42}) and 42 == value and not sm.process_event(e2{}) and 42 == value;
+    }(),
+    "feature.transition_table[constexpr guards]");
+
+static_assert(
+    [] {
+      using namespace sml;
+
+      struct e1 {};
+      struct e2 {};
+
+      sm sm = [] {
+        using namespace dsl;
+        return transition_table{
+            *"s1"_s + event<e1> / process(e2{}) = "s2"_s,
+            "s2"_s + event<e2> = "s3"_s,
+        };
+      };
+
+      using dsl::operator""_s;
+      return sm.process_event(e1{}) and sm.is("s3"_s);
+    }(),
+    "feature.transition_table[process]");
+
+static_assert(
+    [] {
+      using namespace sml;
+
+      struct e1 {};
+      struct e2 {};
+
+      sm sm = [] {
+        using namespace dsl;
+        return transition_table{
+            *"s1"_s + event<e1> = "s2"_s,
+            *"s3"_s + event<e2> = "s4"_s,
+        };
+      };
+
+      using dsl::operator""_s;
+      return sm.is("s1"_s, "s3"_s) and sm.process_event(e1{}) and sm.is("s2"_s, "s3"_s) and sm.process_event(e2{}) and
+             sm.is("s2"_s, "s4"_s);
+    }(),
+    "feature.transition_table[orthogonal regions]");
+
+static_assert(
+    [] {
+      using namespace sml;
+
+      struct e1 {};
+      struct e2 {};
+      struct e3 {};
+
+      sm sm = [] {
+        using namespace dsl;
+        return transition_table{
+            *"s1"_s + event<e1> = "s2"_s,
+            "s2"_s + event<e2> = X,
+            // -------------------------
+            *"s3"_s + event<e3> = X,
+        };
+      };
+
+      using dsl::operator""_s;
+      using dsl::X;
+      return sm.is("s1"_s, "s3"_s) and sm.process_event(e1{}) and sm.is("s2"_s, "s3"_s) and sm.process_event(e2{}) and
+             sm.is(X, "s3"_s) and sm.process_event(e3{}) and sm.is(X, X);
+    }(),
+    "feature.transition_table[orthogonal regions]");
+
+static_assert(
+    [] {
+      using namespace sml;
+
+      struct e1 {};
+      struct e2 {};
+
+      unsigned calls{};
+      auto guard = [] { return true; };
+      auto action = [&] { ++calls; };
+
+      sm sm = [=] {
+        using namespace dsl;
+        return dispatch_table{
+            event<e1>[guard] / action,
+            event<e2>[guard] / action,
+        };
+      };
+
+      using dsl::operator""_s;
+      return 0 == calls and sm.process_event(e1{}) and 1 == calls and sm.process_event(e2{}) and 2 == calls;
+    }(),
+    "feature.dispatch_table");
+
+static_assert(
+    [] {
+      using namespace sml;
+
+      struct e1 {};
+
+      struct s {
+        bool value{};
+
+        constexpr auto operator()() const {
+          using namespace dsl;
+          auto guard = [this] { return value; };
+          return transition_table{
+              *"s1"_s + event<e1>[guard] = "s2"_s,
+          };
+        }
+      };
+
+      using dsl::operator""_s;
+      return [&] {
+        s s{};
+        sm sm{s};
+        return not sm.process_event(e1{}) and sm.is("s1"_s);
+      }() and [&] {
+        s s{true};
+        sm sm{s};
+        return sm.process_event(e1{}) and sm.is("s2"_s);
+      }();
+    }(),
+    "feature.dependencies");
+
+/**
+ * Examples
+ */
+
+static_assert(
+    [] {
+      struct connect {};
+      struct established {};
+      struct ping {};
+      struct disconnect {};
+      struct timeout {};
+
+      struct Connection {
+        constexpr auto operator()() const {
+          constexpr auto establish = [] {};
+          constexpr auto close = [] {};
+          constexpr auto is_valid = [](auto const&) { return true; };
+          constexpr auto reset_timeout = [] {};
+
+          using namespace sml::dsl;
+          return transition_table{
+              *"Disconnected"_s + event<connect> / establish = "Connecting"_s,
+              "Connecting"_s + event<established> = "Connected"_s,
+              "Connected"_s + event<ping>[is_valid] / reset_timeout,
+              "Connected"_s + event<timeout> / establish = "Connecting"_s,
+              "Connected"_s + event<disconnect> / close = "Disconnected"_s,
+          };
+        }
+      };
+
+      sml::sm connection{Connection{}};
+      using sml::dsl::operator""_s;
+      return connection.is("Disconnected"_s) and connection.process_event(connect{}) and connection.is("Connecting"_s) and
+             connection.process_event(established{}) and connection.is("Connected"_s) and connection.process_event(ping{}) and
+             connection.is("Connected"_s) and connection.process_event(disconnect{}) and connection.is("Disconnected"_s);
+    }(),
+    "example.connection");
+
+#if not defined(__cpp_modules)
+#endif  // SML2
+#endif
+#endif
