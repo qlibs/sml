@@ -74,6 +74,10 @@ int main() {
       switch-case, if-else, co-routines, state pattern, etc. can be used instead. Use your own judgment and
       experience when choosing a solution based its trade-offs.
 
+- I don't understand it, why wouldn't I simply use switch-case or state pattern?
+
+    > Switch-case, state pattern can be used instead of state machines, however, the maintance of such solutions in the long term is arguable due to the growing complexity over time.
+
 - What features are supported and what features will be supported?
 
     > ATM SML2 supports basic UML features such as transitions, processing events, unexpected events, etc.
@@ -82,7 +86,7 @@ int main() {
 
 - What does mean that it tests itself?
 
-    > Testing itself upon use means that whenever the sml2 is included/imported all tests are being executed as compile-time.
+    > Testing itself upon use means that whenever the sml2 is included/imported all tests are being executed at compile-time.
 
 - Why testing upon use?
 
@@ -127,21 +131,17 @@ int main() {
 
     > Yes. SML2 is fully compile-time but it can be executed at run-time as well. The run-time is primary use case for SML2.
 
-- I don't understand it, why wouldn't I simply use switch-case or state pattern?
-
-    > Switch-case, state pattern can be used instead of state machines, however, the maintance of such solutions in the long term is arguable due to the growing complexity over time.
-
 - How does it compare to implementing state machines with co-routines?
 
    > It's a different approach. Either has its pros and cons. Co-routines are easier to be executed in parallel but they have performance overhead.
-     Co-routines based state machines are written in imperative style whilst SML is using declarative UDL whilst SML is using declarative DSL.
+     Co-routines based state machines are written in imperative style whilst SML is using declarative Domain Specific Language (DSL).
      More information can be found here - https://youtu.be/Zb6xcd2as6o?t=1529
 
 - Is there any tutorial?
 
     > Please take a look at - https://boost-ext.github.io/sml/tutorial.html
 
-- Why there is no header extension for SML2?
+- Why there is no file extension for SML2?
 
     > SML2 is both: a header and a module so it follows STL and it doesn't have an extensions (for different reasons).
 

@@ -19,16 +19,15 @@ export  // namespace
 
 /**
  * SML2
- *   C++20 single header/module - https://raw.githubusercontent.com/boost-ext/sml2/main/sml2
- *   No dependencies (Neither Boost nor STL is required)
-       * No 'virtual' used (-fno-rtti)
-       * No `exceptions` required (-fno-exceptions)
- *   Library tests itself at compile-time upon include/import
-       * Basically guaranteed no UB, no leaks
- *   Optimized run-time execution (Zero overhead)
-       * https://godbolt.org/z/y99L50
- *   Fast compilation times
- *   Declarative Domain Specific Language (DSL)
+ * C++20 single header/module - https://raw.githubusercontent.com/boost-ext/sml2/main/sml2
+ * No dependencies (Neither Boost nor STL is required)
+ * No 'virtual' used (-fno-rtti)
+ * No `exceptions` required (-fno-exceptions)
+ * Library tests itself at compile-time upon include/import
+ * Basically guaranteed no UB, no leaks
+ * Optimized run-time execution (Zero overhead) - https://godbolt.org/z/y99L50
+ * Fast compilation times
+ * Declarative Domain Specific Language (DSL)
  */
 namespace sml::inline v_2_0_0 {  // should match SML2 version
 namespace meta {
@@ -405,7 +404,8 @@ static_assert(
       tt t;
       sm sm1{t};
       sm sm2{tt{}};
-      return sm1.is("s1"_s) and sm1.process_event(e1{}) and sm1.is("s2"_s) and sm2.is("s1"_s) and sm2.process_event(e1{}) and sm2.is("s2"_s);
+      return sm1.is("s1"_s) and sm1.process_event(e1{}) and sm1.is("s2"_s) and sm2.is("s1"_s) and sm2.process_event(e1{}) and
+             sm2.is("s2"_s);
     }(),
     "feature.ctor");
 
