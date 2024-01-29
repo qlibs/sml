@@ -31,6 +31,8 @@ export  // namespace
 // clang-format on
 namespace sml::inline v_2_0_0 {
 namespace meta {
+template <class...>
+struct type_list {};
 template <auto...>
 struct index_sequence {};
 template <class T, T... Ns>
@@ -42,6 +44,8 @@ using make_index_sequence =
 #elif __has_builtin(__integer_pack)
     index_sequence<__integer_pack(N)...>;
 #endif
+template <class T, template <class...> class TList, class... Ts>
+auto append(TList<Ts...>) -> TList<Ts..., T>;
 
 template <class T>
 auto declval() -> T&&;
@@ -74,10 +78,6 @@ struct fixed_hash_string {
 
 template <auto N>
 fixed_hash_string(const char (&str)[N]) -> fixed_hash_string<N - 1>;
-template <class...>
-struct type_list {};
-template <class T, template <class...> class TList, class... Ts>
-auto append(TList<Ts...>) -> TList<Ts..., T>;
 }  // namespace meta
 
 namespace back {
@@ -160,8 +160,9 @@ class sm<TList<Transitions...>> {
   using state_t = unsigned;
 
  public:
-  constexpr explicit(true) sm(const auto& transition_table)
-      : transition_table_{transition_table} {
+  template<class TransitionTable>
+  constexpr explicit(true) sm(TransitionTable&& transition_table)
+      : transition_table_{static_cast<TransitionTable&&>(transition_table)} {
     const state_t states[]{
         (Transitions::src.data[0] == '*' ? Transitions::src.hash : 0u)...};
     for (auto* current_state = &current_state_[0]; auto state : states) {
@@ -367,7 +368,7 @@ constexpr auto operator""_s() {
 
 template <class T>
 struct sm final : back::sm<decltype(meta::declval<T>()())> {
-  constexpr explicit(false) sm(T t)
+  constexpr explicit(false) sm(T&& t)
       : back::sm<decltype(meta::declval<T>()())>{t()} {}
 };
 template <class T>
@@ -375,17 +376,17 @@ sm(T&&) -> sm<T>;
 
 namespace dsl {
 template <class... Ts>
-struct transition_table : back::pool<Ts...> {
-  constexpr explicit(false) transition_table(Ts... ts)
-      : back::pool<Ts...>{ts...} {}
+struct transition_table final : back::pool<Ts...> {
+  constexpr explicit(false) transition_table(Ts&&... ts)
+      : back::pool<Ts...>{static_cast<Ts&&>(ts)...} {}
   static_assert(
       ((Ts::src.data[0] == '*') + ...) >= 1,
       "[E001] At least one `*state` aka orthogonal region is required!");
 };
 template <class... Ts>
-struct dispatch_table : back::pool<Ts...> {
-  constexpr explicit(false) dispatch_table(Ts... ts)
-      : back::pool<Ts...>{ts...} {}
+struct dispatch_table final : back::pool<Ts...> {
+  constexpr explicit(false) dispatch_table(Ts&&... ts)
+      : back::pool<Ts...>{static_cast<Ts&&>(ts)...} {}
 };
 using front::event;
 using front::operator""_s;
