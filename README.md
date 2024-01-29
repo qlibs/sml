@@ -145,10 +145,6 @@ int main() {
 
     > SML2 is both: a header and a module so it follows STL and it doesn't have an extensions (for different reasons).
 
-- Is SML2 production ready?
-
-    > Not yet, it's still in experimental phase, but it can be used for small projects.
-
 - Do I need modules support to use SML2?
 
     > No. SML2 can be either included or imported.
@@ -193,6 +189,7 @@ int main() {
 - Why statefull TMP has been used?
 
     > Stateful TMP has been used purely for compilation performance. Is not required strictly speaking but it helps with simplicity and speeds up compilation times.
+      Stateful TMP has been also adopted by C++26 static reflection proposal (https://wg21.link/P2996) - https://www.open-std.org/jtc1/sc22/wg21/docs/papers/2023/p2996r1.html#compile-time-ticket-counter.
 
 - Including/Importing SML2 doesn't compile?
 
