@@ -31,10 +31,6 @@ export  // namespace
 // clang-format on
 namespace sml::inline v_2_0_0 {
 namespace meta {
-template <auto Value>
-struct bool_constant {
-  static constexpr auto value = Value;
-};
 template <auto...>
 struct index_sequence {};
 template <class T, T... Ns>
@@ -702,6 +698,13 @@ static_assert(
     }(),
     "feature.transition_table[otherwise guard]");
 
+namespace sml::test {
+template<auto Value>
+struct bool_constant {
+  static constexpr auto value = Value;
+};
+} // sml::test
+
 static_assert(
     [] {
       using namespace sml;
@@ -716,7 +719,7 @@ static_assert(
       sm sm = [&] {
         using namespace dsl;
         auto ct_guard = [](const auto& event) {
-          return sml::meta::bool_constant<requires { event.value; }>{};
+          return sml::test::bool_constant<requires { event.value; }>{};
         };
         auto action = [&](const auto& event) { value += event.value; };
         return transition_table{
