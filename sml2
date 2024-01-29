@@ -106,7 +106,7 @@ class sm<TList<Transitions...>> {
     constexpr auto friend get(predict);
   };
   template <class T, class R>
-  struct set {
+  struct assign {
     constexpr auto friend get(T) { return R{}; }
   };
   template <class... Ts>
@@ -117,17 +117,17 @@ class sm<TList<Transitions...>> {
     if constexpr (requires { get(predict<TEvent, N>{}); }) {
       using predicted = decltype(get(predict<TEvent, N>{}));
       using updated = decltype(meta::append<T>(typename predicted::type{}));
-      set<cache<TEvent, predicted::next>, updated>();
-      set<predict<TEvent, N + 1>, prediction<predicted::next + 1, updated>>();
+      assign<cache<TEvent, predicted::next>, updated>();
+      assign<predict<TEvent, N + 1>, prediction<predicted::next + 1, updated>>();
     } else if constexpr (requires { get(cache<TEvent, I>{}); }) {
       set_transitions_impl<TEvent, T, N, I + 1>();
     } else if constexpr (not I) {
-      set<cache<TEvent, I>, transitions<T>>();
-      set<predict<TEvent, N + 1>, prediction<I + 1, transitions<T>>>();
+      assign<cache<TEvent, I>, transitions<T>>();
+      assign<predict<TEvent, N + 1>, prediction<I + 1, transitions<T>>>();
     } else {
       using updated = decltype(meta::append<T>(get(cache<TEvent, I - 1>{})));
-      set<cache<TEvent, I>, updated>();
-      set<predict<TEvent, N + 1>, prediction<I + 1, updated>>();
+      assign<cache<TEvent, I>, updated>();
+      assign<predict<TEvent, N + 1>, prediction<I + 1, updated>>();
     }
   }
 
@@ -319,13 +319,13 @@ struct transition {
     if constexpr (using R = decltype(invoke(guard, event, self, args...)); requires { R::value; }) {
       if constexpr (R::value) {
         invoke(action, event, self, args...);
-        static_assert(not dst.size, "on_entry can't have dst state");
+        static_assert(not dst.size, "[E002] on_entry can't have dst state");
         return true;
       }
     } else {
       if (invoke(guard, event, self, args...)) {
         invoke(action, event, self, args...);
-        static_assert(not dst.size, "on_entry can't have dst state");
+        static_assert(not dst.size, "[E002] on_entry can't have dst state");
         return true;
       }
     }
@@ -336,13 +336,13 @@ struct transition {
     if constexpr (using R = decltype(invoke(guard, event, self, args...)); requires { R::value; }) {
       if constexpr (R::value) {
         invoke(action, event, self, args...);
-        static_assert(not dst.size, "on_entry can't have dst state");
+        static_assert(not dst.size, "[E003] on_exit can't have dst state");
         return true;
       }
     } else {
       if (invoke(guard, event, self, args...)) {
         invoke(action, event, self, args...);
-        static_assert(not dst.size, "on_entry can't have dst state");
+        static_assert(not dst.size, "[E003] on_exit can't have dst state");
         return true;
       }
     }
