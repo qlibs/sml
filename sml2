@@ -81,6 +81,8 @@ fixed_hash_string(const char (&str)[N]) -> fixed_hash_string<N - 1>;
 }  // namespace meta
 
 namespace back {
+struct on_entry {};
+struct on_exit {};
 template <class... Ts>
 struct pool : Ts... {
   constexpr explicit(true) pool(Ts... ts) : Ts{ts}... {}
@@ -169,6 +171,10 @@ class sm<TList<Transitions...>> {
       if (state) {
         *current_state++ = state;
       }
+    }
+
+    if constexpr (requires { process_event(back::on_entry{}); }) {
+      process_event(back::on_entry{});
     }
   }
 
@@ -261,6 +267,12 @@ concept invocable = not requires { &invocable_impl<T>::operator(); };
   }
 }
 
+constexpr void process_event(auto& self, const auto& event, auto&&... args) {
+  if constexpr (requires { self.process_event(event, args...); }) {
+    self.process_event(event, args...);
+  }
+}
+
 namespace detail {
 constexpr auto none = [] {};
 constexpr auto always = [] { return true; };
@@ -303,24 +315,61 @@ struct transition {
                                                             .action = action};
   }
 
-  [[nodiscard]] constexpr auto operator()(const auto& event,
-                                          [[maybe_unused]] auto& current_state,
-                                          auto& self, auto&&... args) -> bool {
-    using R = decltype(invoke(guard, event, self, args...));
-    if constexpr (requires { R::value; }) {
+  [[nodiscard]] constexpr auto operator()(const back::on_entry& event, [[maybe_unused]] auto& current_state, auto& self, auto&&... args) -> bool {
+    if constexpr (using R = decltype(invoke(guard, event, self, args...)); requires { R::value; }) {
       if constexpr (R::value) {
-        if constexpr (dst.size) {
-          current_state = dst.hash;
-        }
         invoke(action, event, self, args...);
+        static_assert(not dst.size, "on_entry can't have dst state");
         return true;
       }
     } else {
       if (invoke(guard, event, self, args...)) {
+        invoke(action, event, self, args...);
+        static_assert(not dst.size, "on_entry can't have dst state");
+        return true;
+      }
+    }
+    return false;
+  }
+
+  [[nodiscard]] constexpr auto operator()(const back::on_exit& event, [[maybe_unused]] auto& current_state, auto& self, auto&&... args) -> bool {
+    if constexpr (using R = decltype(invoke(guard, event, self, args...)); requires { R::value; }) {
+      if constexpr (R::value) {
+        invoke(action, event, self, args...);
+        static_assert(not dst.size, "on_entry can't have dst state");
+        return true;
+      }
+    } else {
+      if (invoke(guard, event, self, args...)) {
+        invoke(action, event, self, args...);
+        static_assert(not dst.size, "on_entry can't have dst state");
+        return true;
+      }
+    }
+    return false;
+  }
+
+  [[nodiscard]] constexpr auto operator()(const auto& event,
+                                          [[maybe_unused]] auto& current_state,
+                                          auto& self, auto&&... args) -> bool {
+    if constexpr (using R = decltype(invoke(guard, event, self, args...)); requires { R::value; }) {
+      if constexpr (R::value) {
+        process_event(self, back::on_exit{}, args...);
         if constexpr (dst.size) {
           current_state = dst.hash;
         }
         invoke(action, event, self, args...);
+        process_event(self, back::on_entry{}, args...);
+        return true;
+      }
+    } else {
+      if (invoke(guard, event, self, args...)) {
+        process_event(self, back::on_exit{}, args...);
+        if constexpr (dst.size) {
+          current_state = dst.hash;
+        }
+        invoke(action, event, self, args...);
+        process_event(self, back::on_entry{}, args...);
         return true;
       }
     }
@@ -332,7 +381,10 @@ struct transition {
 };
 
 template <class... TEvents>
-constexpr auto event = transition<"", meta::type_list<TEvents...>>{};
+inline constexpr auto event = transition<"", meta::type_list<TEvents...>>{};
+inline constexpr auto on_entry = event<back::on_entry>;
+inline constexpr auto on_exit = event<back::on_exit>;
+
 template <meta::fixed_hash_string Str>
 constexpr auto operator""_s() {
   return transition<Str>{};
@@ -389,6 +441,8 @@ struct dispatch_table final : back::pool<Ts...> {
       : back::pool<Ts...>{static_cast<Ts&&>(ts)...} {}
 };
 using front::event;
+using front::on_entry;
+using front::on_exit;
 using front::operator""_s;
 using front::operator, ;
 using front::operator not;
@@ -451,6 +505,52 @@ static_assert(
       return sm.process_event(e1{}) and sm.is("s2"_s);
     }(),
     "feature.process_event");
+
+static_assert(
+    [] {
+      using namespace sml;
+
+      struct e1 {};
+
+      int on_entry_calls{};
+
+      sm sm = [&] {
+        using namespace dsl;
+        return transition_table{
+            *"idle"_s + on_entry / [&] { ++on_entry_calls; }
+        };
+      };
+
+      using dsl::operator""_s;
+      return sm.is("idle"_s) and on_entry_calls == 1;
+    }(),
+    "feature.start[on_entry]");
+
+static_assert(
+    [] {
+      using namespace sml;
+
+      struct e1 {};
+      struct e2 {};
+
+      int on_entry_calls{};
+      int on_exit_calls{};
+
+      sm sm = [&] {
+        using namespace dsl;
+        return transition_table{
+            *"s1"_s + event<e1> = "s2"_s,
+             "s2"_s + on_entry / [&] { ++on_entry_calls; },
+             "s2"_s + on_exit / [&] { ++on_exit_calls; },
+             "s2"_s + event<e2> = "s3"_s,
+        };
+      };
+
+      using dsl::operator""_s;
+      return sm.process_event(e1{}) and sm.is("s2"_s) and on_entry_calls == 1 and on_exit_calls == 0 and 
+             sm.process_event(e2{}) and on_entry_calls == 1 and on_exit_calls == 1 and sm.is("s3"_s);
+    }(),
+    "feature.process_event[on_entry/on_exit]");
 
 static_assert(
     [] {
