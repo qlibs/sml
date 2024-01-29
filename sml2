@@ -141,7 +141,7 @@ class sm<TList<Transitions...>> {
       set<cache<TEvent, predicted::next>, updated>();
       set<predict<TEvent, N + 1>, prediction<predicted::next + 1, updated>>();
     } else if constexpr (requires { get(cache<TEvent, I>{}); }) {
-      set_transitions<TEvent, T, N, I + 1>();
+      set_transitions_impl<TEvent, T, N, I + 1>();
     } else if constexpr (not I) {
       set<cache<TEvent, I>, transitions<T>>();
       set<predict<TEvent, N + 1>, prediction<I + 1, transitions<T>>>();
