@@ -17,54 +17,35 @@ export  // namespace
 #pragma GCC system_header  // -Wnon-template-friend
 #endif
 
+// clang-format off
 /**
  * SML2
- * C++20 single header/module -
- * https://raw.githubusercontent.com/boost-ext/sml2/main/sml2 No dependencies
- * (Neither Boost nor STL is required) No 'virtual' used (-fno-rtesti) No
- * `exceptions` required (-fno-exceptions) Library tests itself at compile-time
- * upon include/import Basically guaranteed no UB, no leaks Optimized run-time
- * execution (Zero overhead) - https://godbolt.org/z/y99L50 Fast compilation
- * times Declarative Domain Specific Language (DSL)
+ * C++20 single header/module - https://raw.githubusercontent.com/boost-ext/sml2/main/sml2
+ * No dependencies (Neither Boost nor STL is required) No 'virtual' used (-fno-rtti)
+ * No `exceptions` required (-fno-exceptions)
+ * Library tests itself at compile-time upon include/import Basically guaranteed no UB, no leaks
+ * Optimized run-time execution - https://godbolt.org/z/y99L50
+ * Fast compilation times
+ * Declarative Domain Specific Language (DSL)
  */
-namespace sml::inline v_2_0_0 {  // should match SML2 version
+// clang-format on
+namespace sml::inline v_2_0_0 {
 namespace meta {
 template <auto Value>
 struct bool_constant {
   static constexpr auto value = Value;
 };
-template <int...>
-struct index_sequence {
-  using type = index_sequence;
-};
+template <auto...>
+struct index_sequence {};
+template <class T, T... Ns>
+using integer_sequence = index_sequence<Ns...>;
+template <auto N>
+using make_index_sequence =
 #if __has_builtin(__make_integer_seq)
-template <class T, T...>
-struct integer_sequence;
-template <int... Ns>
-struct integer_sequence<int, Ns...> {
-  using type = index_sequence<Ns...>;
-};
-template <int N>
-struct make_index_sequence_impl {
-  using type = typename __make_integer_seq<integer_sequence, int, N>::type;
-};
-#else
-template <class, class>
-struct concat;
-template <int... I1, int... I2>
-struct concat<index_sequence<I1...>, index_sequence<I2...>>
-    : index_sequence<I1..., (sizeof...(I1) + I2)...> {};
-template <int N>
-struct make_index_sequence_impl
-    : concat<typename make_index_sequence_impl<N / 2>::type,
-             typename make_index_sequence_impl<N - N / 2>::type>::type {};
-template <>
-struct make_index_sequence_impl<0> : index_sequence<> {};
-template <>
-struct make_index_sequence_impl<1> : index_sequence<0> {};
+    __make_integer_seq<integer_sequence, decltype(N), N>;
+#elif __has_builtin(__integer_pack)
+    index_sequence<__integer_pack(N)...>;
 #endif
-template <int N>
-using make_index_sequence = typename make_index_sequence_impl<N>::type;
 
 template <class T>
 auto declval() -> T&&;
