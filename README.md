@@ -230,7 +230,7 @@ int main() {
 
 - Is there a Rust version?
 
-    > Sort of, experimental, with limited features Rust version of SML can be found here - https://github.com/boost-ext/sml/blob/master/sml/sml.rs
+    > Sort of, experimental, with limited features Rust version of SML can be found here - https://gist.github.com/krzysztof-jusiak/079f80e9d8c472b2c8d515cbf07ad665
 
 - How can I contribute?
 
@@ -239,10 +239,6 @@ int main() {
 - How to report a bug?
 
     > Please follow [PULL_REQUEST_TEMPLATE.md](.github/PULL_REQUEST_TEMPLATE.md)
-
-- Why did the T-Rex become a C++ programmer?
-
-    > Because it wanted to work on its 'rawr'-formance!
 
 ---
 
