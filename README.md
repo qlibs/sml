@@ -149,10 +149,6 @@ int main() {
 
     > No. SML2 can be either included or imported.
 
-- Will MSVC be supported?
-
-    > Yes, MSVC support is desired and it will be added in the future.
-
 - Is SML2 SFINAE friendly?
 
     > Yes, SML2 is SFINAE (Substitution Failure Is Not An Error) friendly, especially the call to `process_event`.
