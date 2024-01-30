@@ -385,22 +385,26 @@ struct transition {
                                           TSelf& self, auto&&... args) -> bool {
     if constexpr (using R = decltype(invoke(guard, event, self, args...)); requires { R::value; }) {
       if constexpr (R::value) {
-        process_event(self, back::on_exit{}, args...);
         if constexpr (dst::size) {
+          process_event(self, back::on_exit{}, args...);
           current_state = TSelf::template state_id<dst>();
         }
         invoke(action, event, self, args...);
-        process_event(self, back::on_entry{}, args...);
+        if constexpr (dst::size) {
+          process_event(self, back::on_entry{}, args...);
+        }
         return true;
       }
     } else {
       if (invoke(guard, event, self, args...)) {
-        process_event(self, back::on_exit{}, args...);
         if constexpr (dst::size) {
+          process_event(self, back::on_exit{}, args...);
           current_state = TSelf::template state_id<dst>();
         }
         invoke(action, event, self, args...);
-        process_event(self, back::on_entry{}, args...);
+        if constexpr (dst::size) {
+          process_event(self, back::on_entry{}, args...);
+        }
         return true;
       }
     }
@@ -584,6 +588,32 @@ static_assert(
              sm.process_event(e2{}) and on_entry_calls == 1 and on_exit_calls == 1 and sm.is("s3"_s);
     }(),
     "feature.process_event[on_entry/on_exit]");
+
+static_assert(
+    [] {
+      using namespace sml;
+
+      struct e1 {};
+      struct e2 {};
+
+      int on_entry_calls{};
+      int on_exit_calls{};
+
+      sm sm = [&] {
+        using namespace dsl;
+        return transition_table{
+            *"s1"_s + event<e1> = "s2"_s,
+             "s2"_s + event<e2>,
+             "s2"_s + on_entry / [&] { ++on_entry_calls; },
+             "s2"_s + on_exit / [&] { ++on_exit_calls; },
+        };
+      };
+
+      using dsl::operator""_s;
+      return sm.process_event(e1{}) and sm.is("s2"_s) and on_entry_calls == 1 and on_exit_calls == 0 and 
+             sm.process_event(e2{}) and on_entry_calls == 1 and on_exit_calls == 0 and sm.is("s2"_s);
+    }(),
+    "feature.process_event[on_entry/on_exit] with internal transitions");
 
 static_assert(
     [] {
