@@ -26,7 +26,7 @@ export  // namespace
  * - No `exceptions` required (-fno-exceptions)
  * - Library tests itself at compile-time upon include/import
  * - Basically guaranteed no UB, no leaks
- * - Optimized run-time execution - https://godbolt.org/z/y99L50
+ * - Optimized run-time execution - https://godbolt.org/z/j51Tch6PT
  * - Fast compilation times - https://github.com/boost-ext/sml2/blob/main/.github/images/sml2.perf.png
  */
 // clang-format on

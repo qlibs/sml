@@ -1,6 +1,6 @@
 <a href="http://www.boost.org/LICENSE_1_0.txt" target="_blank">![Boost Licence](http://img.shields.io/badge/license-boost-blue.svg)</a>
 <a href="https://github.com/boost-ext/sml2/releases" target="_blank">![Version](https://badge.fury.io/gh/boost-ext%2Fsml2.svg)</a>
-<a href="https://godbolt.org/z/W9rP94cYK">![Try it online](https://img.shields.io/badge/try%20it-online-blue.svg)</a>
+<a href="https://godbolt.org/z/j51Tch6PT">![Try it online](https://img.shields.io/badge/try%20it-online-blue.svg)</a>
 
 ---------------------------------------
 
@@ -23,41 +23,39 @@
 ```cpp
 // events
 struct connect {};
-struct ping {
-    bool valid = false;
-};
+struct ping { bool valid = false; };
 struct established {};
 struct timeout {};
 struct disconnect {};
 
 int main() {
-    // state machine
-    sml::sm connection = [] {
-        // guards
-        auto is_valid  = [](const auto& event) { return event.valid; };
+  // state machine
+  sml::sm connection = [] {
+    // guards
+    auto is_valid  = [](const auto& event) { return event.valid; };
 
-        // actions
-        auto establish = [] { std::puts("establish"); };
-        auto close     = [] { std::puts("close"); };
-        auto setup     = [] { std::puts("setup"); };
+    // actions
+    auto establish = [] { std::puts("establish"); };
+    auto close     = [] { std::puts("close"); };
+    auto setup     = [] { std::puts("setup"); };
 
-        using namespace sml::dsl;
-        /**
-         * src_state + event [ guard ] / action = dst_state
-         */
-        return transition_table{
-            *"Disconnected"_s + event<connect> / establish    = "Connecting"_s,
-             "Connecting"_s   + event<established>            = "Connected"_s,
-             "Connected"_s    + event<ping>[is_valid] / setup,
-             "Connected"_s    + event<timeout> / establish    = "Connecting"_s,
-             "Connected"_s    + event<disconnect> / close     = "Disconnected"_s,
-        };
+    using namespace sml::dsl;
+    /**
+     * src_state + event [ guard ] / action = dst_state
+     */
+    return transition_table{
+      *"Disconnected"_s + event<connect> / establish    = "Connecting"_s,
+       "Connecting"_s   + event<established>            = "Connected"_s,
+       "Connected"_s    + event<ping>[is_valid] / setup,
+       "Connected"_s    + event<timeout> / establish    = "Connecting"_s,
+       "Connected"_s    + event<disconnect> / close     = "Disconnected"_s,
     };
+  };
 
-    connection.process_event(connect{});
-    connection.process_event(established{});
-    connection.process_event(ping{.value = true});
-    connection.process_event(disconnect{});
+  connection.process_event(connect{});
+  connection.process_event(established{});
+  connection.process_event(ping{.valid = true});
+  connection.process_event(disconnect{});
 }
 ```
 
