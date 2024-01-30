@@ -169,12 +169,13 @@ class sm<TList<Transitions...>> {
     constexpr explicit(false) state_ids(int i = {}) : type<Ts>{i++}... { }
   };
 
-  static constexpr auto events = 
+  static_assert(
     []<auto... Ns>(meta::index_sequence<Ns...>) {
       using swallow = bool[];
       void(swallow{(set_transitions<Transitions, Ns>(typename Transitions::event{}),true)...});
       return true;
-    }(meta::make_index_sequence<sizeof...(Transitions)>{});
+    }(meta::make_index_sequence<sizeof...(Transitions)>{})
+  );
 
   static constexpr auto states = 
     []<auto... Ns, class... Ts>(meta::index_sequence<Ns...>, meta::type_list<Ts...>) {
