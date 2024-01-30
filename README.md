@@ -13,7 +13,7 @@
     * No `exceptions` required (-fno-exceptions)
 * [Library tests itself at compile-time upon include/import](https://github.com/boost-ext/sml2/blob/main/sml2#L388)
     * Basically guaranteed no UB, no leaks
-* Optimized run-time execution (Zero overhead)
+* Optimized run-time execution
     * https://godbolt.org/z/W9rP94cYK
 * Fast compilation times
     <p align="center"><img width="65%" src=".github/images/sml2.perf.png" /></p>
