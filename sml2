@@ -33,7 +33,8 @@ namespace sml::inline v_2_0_0 {
 namespace meta {
 template <class...>
 struct type_list {};
-template <auto...>
+template<class... Ts> struct inherit : Ts... {};
+template <int...>
 struct index_sequence {};
 template <class T, T... Ns>
 using integer_sequence = index_sequence<Ns...>;
@@ -44,40 +45,35 @@ using make_index_sequence =
 #elif __has_builtin(__integer_pack)
     index_sequence<__integer_pack(N)...>;
 #endif
-template <class T, template <class...> class TList, class... Ts>
-auto append(TList<Ts...>) -> TList<Ts..., T>;
+static_assert(__is_same(index_sequence<>, make_index_sequence<0>));
+static_assert(__is_same(index_sequence<0>, make_index_sequence<1>));
+static_assert(__is_same(index_sequence<0,1>, make_index_sequence<2>));
+
+template <class... T, template <class...> class TList, class... Ts>
+auto append(TList<Ts...>) -> TList<Ts..., T...>;
+static_assert(__is_same(type_list<int>, decltype(append<int>(type_list{}))));
+static_assert(__is_same(type_list<int, float>, decltype(append<int, float>(type_list{}))));
+static_assert(__is_same(type_list<int, float>, decltype(append<float>(type_list<int>{}))));
+static_assert(__is_same(type_list<float, int>, decltype(append<int>(type_list<float>{}))));
 
 template <class T>
 auto declval() -> T&&;
 
-template <auto N>
-struct fixed_hash_string {
-  static constexpr auto size = N;
+template <auto Size>
+struct fixed_string {
+  static constexpr auto size = Size;
 
-  constexpr fixed_hash_string() = default;
-  constexpr explicit(false) fixed_hash_string(const char (&str)[N + 1]) {
-    for (auto i = 0u; i < N; ++i) {
+  constexpr fixed_string() = default;
+  constexpr explicit(false) fixed_string(const char (&str)[Size]) {
+    for (auto i = 0u; i < Size; ++i) {
       data[i] = str[i];
-      (hash ^= data[i]) <<= 1;
     }
   }
 
-  constexpr auto operator*() const {
-    fixed_hash_string<N + 1> str{};
-    str.data[0] = '*';
-    for (auto i = 0u; i < N; ++i) {
-      str.data[i + 1] = data[i];
-      (str.hash ^= str.data[i + 1]) <<= 1;
-    }
-    return str;
-  }
-
-  char data[N + 1]{};
-  unsigned hash{};
+  char data[Size]{};
 };
 
-template <auto N>
-fixed_hash_string(const char (&str)[N]) -> fixed_hash_string<N - 1>;
+template <auto Size> fixed_string(const char (&)[Size]) -> fixed_string<Size>;
 }  // namespace meta
 
 namespace back {
@@ -88,32 +84,39 @@ struct pool : Ts... {
   constexpr explicit(true) pool(Ts... ts) : Ts{ts}... {}
 };
 
-template <class...>
-class sm;
+template <class...> class sm;
 template <template <class...> class TList, class... Transitions>
 class sm<TList<Transitions...>> {
+  using state_t = unsigned;
+
+  template<class, auto = 0> struct state_id_ { int id{}; };
+
+  template <class... Ts> using transitions = meta::type_list<Ts...>;
+
   template <auto N, class T>
-  struct prediction {
+  struct prediction final {
     static constexpr auto next = N;
     using type = T;
   };
-  template <class, auto>
-  struct cache {
-    constexpr auto friend get(cache);
+  template<auto>
+  struct state {
+    consteval auto friend get(state);
   };
   template <class, auto>
-  struct predict {
-    constexpr auto friend get(predict);
+  struct cache final {
+    consteval auto friend get(cache);
+  };
+  template <class, auto>
+  struct predict final {
+    consteval auto friend get(predict);
   };
   template <class T, class R>
-  struct assign {
-    constexpr auto friend get(T) { return R{}; }
+  struct assign final {
+    consteval auto friend get(T) { return R{}; }
   };
-  template <class... Ts>
-  using transitions = meta::type_list<Ts...>;
 
   template <class TEvent, class T, auto N, auto I = 0>
-  static constexpr auto set_transitions_impl() {
+  static consteval auto set_transitions_impl() {
     if constexpr (requires { get(predict<TEvent, N>{}); }) {
       using predicted = decltype(get(predict<TEvent, N>{}));
       using updated = decltype(meta::append<T>(typename predicted::type{}));
@@ -132,50 +135,81 @@ class sm<TList<Transitions...>> {
   }
 
   template <class T, auto N, class... TEvents>
-  static constexpr auto set_transitions(meta::type_list<TEvents...>) {
+  static consteval auto set_transitions(meta::type_list<TEvents...>) {
     (set_transitions_impl<TEvents, T, N>(), ...);
   }
 
   template <class TEvent, auto I = 1>
-  [[nodiscard]] static constexpr auto get_transitions() {
+  [[nodiscard]] static consteval auto get_transitions() {
     if constexpr (requires { get(cache<TEvent, I>{}); }) {
       return get_transitions<TEvent, I + 1>();
-    } else if constexpr (requires {
-                           get(cache<TEvent, I - 1>{});
-                         }) {  // can be unexpected
+    } else if constexpr (requires { get(cache<TEvent, I - 1>{}); }) {  // can be unexpected
       return get(cache<TEvent, I - 1>{});
     }
   }
 
-  static_assert((
-      []<auto... Ns>(meta::index_sequence<Ns...>) {
-        using swallow = bool[];
-        void(swallow{
-            (set_transitions<Transitions, Ns>(typename Transitions::event{}),
-             true)...});
-      }(meta::make_index_sequence<sizeof...(Transitions)>{}),
-      true));
+  template<class T>
+  static consteval auto id() {
+    if constexpr (T::next == 0) {
+      assign<state<T::next>, meta::inherit<typename T::type>>();
+      return state_id_<typename T::type>{};
+    } else if constexpr (constexpr auto states = get(state<T::next-1>{}); __is_base_of(typename T::type, decltype(states))) {
+      assign<state<T::next>, decltype(states)>();
+      return state_id_<typename T::type, T::next>{};
+    } else {
+      assign<state<T::next>, decltype(meta::append<typename T::type>(states))>();
+      return state_id_<typename T::type>{};
+    }
+  }
 
-  static constexpr auto num_of_regions =
-      ((Transitions::src.data[0] == '*') + ...);
+  template<class... Ts>
+  struct state_ids final : decltype(id<Ts>())... {
+    template<class T>
+    using type = decltype(id<T>());
+    constexpr explicit(false) state_ids(int i = {}) : type<Ts>{i++}... { }
+  };
 
-  using state_t = unsigned;
+  static constexpr auto events = 
+    []<auto... Ns>(meta::index_sequence<Ns...>) {
+      using swallow = bool[];
+      void(swallow{(set_transitions<Transitions, Ns>(typename Transitions::event{}),true)...});
+      return true;
+    }(meta::make_index_sequence<sizeof...(Transitions)>{});
+
+  static constexpr auto states = 
+    []<auto... Ns, class... Ts>(meta::index_sequence<Ns...>, meta::type_list<Ts...>) {
+      return state_ids<prediction<Ns, Ts>...>{};
+    }(meta::make_index_sequence<sizeof...(Transitions)*2>{}, meta::type_list<typename Transitions::src..., typename Transitions::dst...>{});
+
+ public:
+  template<class TState>
+  [[nodiscard]] static consteval auto state_id() {
+    return static_cast<state_id_<TState>>(states).id;
+  }
+
+  static constexpr auto num_of_regions = (Transitions::initial + ...);
+
+  constexpr auto start() {
+    if constexpr (requires { process_event(back::on_entry{}); }) {
+      process_event(back::on_entry{});
+    }
+  }
+
+  constexpr auto init() {
+    auto i = 0;
+    ([&, this] {
+     if constexpr (Transitions::initial) {
+      current_state_[i++] = state_id<typename Transitions::src>();
+     }
+    }(), ...);
+  }
 
  public:
   template<class TransitionTable>
   constexpr explicit(true) sm(TransitionTable&& transition_table)
       : transition_table_{static_cast<TransitionTable&&>(transition_table)} {
-    const state_t states[]{
-        (Transitions::src.data[0] == '*' ? Transitions::src.hash : 0u)...};
-    for (auto* current_state = &current_state_[0]; auto state : states) {
-      if (state) {
-        *current_state++ = state;
-      }
-    }
-
-    if constexpr (requires { process_event(back::on_entry{}); }) {
-      process_event(back::on_entry{});
-    }
+    init();
+    start();
   }
 
   template <class TEvent, const auto transitions = get_transitions<TEvent>()>
@@ -192,11 +226,11 @@ class sm<TList<Transitions...>> {
     }
   }
 
-  [[nodiscard]] constexpr auto is(auto... states) const -> bool
-    requires(num_of_regions > 0u)
-  {
-    unsigned i{};
-    return ((states.src.hash == current_state_[i++]) and ...);
+  template<class... TStates>
+  [[nodiscard]] constexpr auto is(const TStates...) const -> bool requires (num_of_regions > 0u) {
+    return [this]<auto... Ns>(meta::index_sequence<Ns...>) {
+      return ((state_id<typename TStates::src>() == current_state_[Ns]) and ...);
+    }(meta::make_index_sequence<num_of_regions>{});
   }
 
  private:
@@ -216,16 +250,17 @@ class sm<TList<Transitions...>> {
   template <class TEvent, class T>
   constexpr auto process_event_1(const TEvent& event, auto& current_state,
                                  transitions<T>, auto&&... args) -> bool {
-    return (T::src.hash == current_state or not T::src.hash) and
-           static_cast<T&>(transition_table_)(event, current_state, *this,
-                                              args...);
+    if constexpr (T::src::size > 1) {
+      return state_id<typename T::src>() == current_state and static_cast<T&>(transition_table_)(event, current_state, *this, args...);
+    } else {
+      return static_cast<T&>(transition_table_)(event, current_state, *this, args...);
+    }
   }
 
   template <class TEvent, class... Ts>
   constexpr auto process_event_1(const TEvent& event, auto& current_state,
                                  transitions<Ts...>, auto&&... args) -> bool {
-    return (process_event_1(event, current_state, transitions<Ts>{}, args...) or
-            ...);
+    return (process_event_1(event, current_state, transitions<Ts>{}, args...) or ...);
   }
 
   template <class TEvent, auto... Rs>
@@ -238,8 +273,7 @@ class sm<TList<Transitions...>> {
   }
 
   [[no_unique_address]] TList<Transitions...> transition_table_{};
-  [[no_unique_address]] state_t
-      current_state_[not num_of_regions ? 1 : num_of_regions]{};
+  [[no_unique_address]] state_t current_state_[num_of_regions ? num_of_regions : 1]{};
 };
 }  // namespace back
 
@@ -274,58 +308,54 @@ constexpr void process_event(auto& self, const auto& event, auto&&... args) {
 }
 
 namespace detail {
+struct anonymous{};
 constexpr auto none = [] {};
 constexpr auto always = [] { return true; };
 }  // namespace detail
 
-template <
-    meta::fixed_hash_string Src = "", class TEvent = decltype(detail::none),
-    class TGuard = decltype(detail::always),
-    class TAction = decltype(detail::none), meta::fixed_hash_string Dst = "">
+template <const auto Initial, class TSrc, class TDst, class TEvent = detail::anonymous, class TGuard = decltype(detail::always), class TAction = decltype(detail::none)>
 struct transition {
-  static constexpr auto src = Src;
-  static constexpr auto dst = Dst;
+  using src = TSrc;
+  using dst = TDst;
   using event = TEvent;
 
+  static constexpr auto initial = Initial;
+
   [[nodiscard]] constexpr auto operator*() const {
-    return transition<*Src, TEvent, TGuard, TAction, Dst>{.guard = guard,
-                                                          .action = action};
+    return transition<true, TSrc, TDst, TEvent, TGuard, TAction>{.guard = guard, .action = action};
   }
 
   template <class T>
   [[nodiscard]] constexpr auto operator+(const T& t) const {
-    return transition<Src, typename T::event, decltype(T::guard),
-                      decltype(T::action)>{.guard = t.guard,
-                                           .action = t.action};
+    return transition<initial, TSrc, TDst, typename T::event, decltype(T::guard), decltype(T::action)>{.guard = t.guard, .action = t.action};
   }
 
   template <class T>
   [[nodiscard]] constexpr auto operator[](const T& guard) const {
-    return transition<Src, TEvent, T>{.guard = guard, .action = action};
+    return transition<initial, TSrc, TDst, TEvent, T>{.guard = guard, .action = action};
   }
 
   template <class T>
   [[nodiscard]] constexpr auto operator/(const T& action) const {
-    return transition<Src, TEvent, TGuard, T>{.guard = guard, .action = action};
+    return transition<initial, TSrc, TDst, TEvent, TGuard, T>{.guard = guard, .action = action};
   }
 
   template <class T>
   [[nodiscard]] constexpr auto operator=(const T&) const {
-    return transition<src, TEvent, TGuard, TAction, T::src>{.guard = guard,
-                                                            .action = action};
+    return transition<initial, TSrc, typename T::src, TEvent, TGuard, TAction>{.guard = guard, .action = action};
   }
 
   [[nodiscard]] constexpr auto operator()(const back::on_entry& event, [[maybe_unused]] auto& current_state, auto& self, auto&&... args) -> bool {
     if constexpr (using R = decltype(invoke(guard, event, self, args...)); requires { R::value; }) {
       if constexpr (R::value) {
         invoke(action, event, self, args...);
-        static_assert(not dst.size, "[E002] on_entry can't have dst state");
+        static_assert(not dst::size, "[E002] on_entry can't have dst state!");
         return true;
       }
     } else {
       if (invoke(guard, event, self, args...)) {
         invoke(action, event, self, args...);
-        static_assert(not dst.size, "[E002] on_entry can't have dst state");
+        static_assert(not dst::size, "[E002] on_entry can't have dst state!");
         return true;
       }
     }
@@ -336,27 +366,28 @@ struct transition {
     if constexpr (using R = decltype(invoke(guard, event, self, args...)); requires { R::value; }) {
       if constexpr (R::value) {
         invoke(action, event, self, args...);
-        static_assert(not dst.size, "[E003] on_exit can't have dst state");
+        static_assert(not dst::size, "[E003] on_exit can't have dst state!");
         return true;
       }
     } else {
       if (invoke(guard, event, self, args...)) {
         invoke(action, event, self, args...);
-        static_assert(not dst.size, "[E003] on_exit can't have dst state");
+        static_assert(not dst::size, "[E003] on_exit can't have dst state!");
         return true;
       }
     }
     return false;
   }
 
+  template<class TSelf>
   [[nodiscard]] constexpr auto operator()(const auto& event,
                                           [[maybe_unused]] auto& current_state,
-                                          auto& self, auto&&... args) -> bool {
+                                          TSelf& self, auto&&... args) -> bool {
     if constexpr (using R = decltype(invoke(guard, event, self, args...)); requires { R::value; }) {
       if constexpr (R::value) {
         process_event(self, back::on_exit{}, args...);
-        if constexpr (dst.size) {
-          current_state = dst.hash;
+        if constexpr (dst::size) {
+          current_state = TSelf::template state_id<dst>();
         }
         invoke(action, event, self, args...);
         process_event(self, back::on_entry{}, args...);
@@ -365,8 +396,8 @@ struct transition {
     } else {
       if (invoke(guard, event, self, args...)) {
         process_event(self, back::on_exit{}, args...);
-        if constexpr (dst.size) {
-          current_state = dst.hash;
+        if constexpr (dst::size) {
+          current_state = TSelf::template state_id<dst>();
         }
         invoke(action, event, self, args...);
         process_event(self, back::on_entry{}, args...);
@@ -380,14 +411,20 @@ struct transition {
   [[no_unique_address]] TAction action;
 };
 
+template<char... Cs> struct state {
+  static constexpr auto size = sizeof...(Cs);
+};
+
 template <class... TEvents>
-inline constexpr auto event = transition<"", meta::type_list<TEvents...>>{};
+inline constexpr auto event = transition<false, state<>, state<>, meta::type_list<TEvents...>>{};
 inline constexpr auto on_entry = event<back::on_entry>;
 inline constexpr auto on_exit = event<back::on_exit>;
 
-template <meta::fixed_hash_string Str>
-constexpr auto operator""_s() {
-  return transition<Str>{};
+template <meta::fixed_string State>
+[[nodiscard]] constexpr auto operator""_s() {
+  return []<auto... Ns>(meta::index_sequence<Ns...>) {
+    return transition<false, state<State.data[Ns]...>, state<>>{};
+  }(meta::make_index_sequence<State.size>{});
 }
 
 [[nodiscard]] constexpr auto operator,(const concepts::invocable auto& lhs,
@@ -432,7 +469,7 @@ struct transition_table final : back::pool<Ts...> {
   constexpr explicit(false) transition_table(Ts&&... ts)
       : back::pool<Ts...>{static_cast<Ts&&>(ts)...} {}
   static_assert(
-      ((Ts::src.data[0] == '*') + ...) >= 1,
+      (Ts::initial + ...) >= 1,
       "[E001] At least one `*state` aka orthogonal region is required!");
 };
 template <class... Ts>
@@ -458,10 +495,6 @@ constexpr auto process = [](const auto& event) {
 };
 }  // namespace dsl
 }  // namespace sml::inline v_2_0_0
-
-/**
- * Tests
- */
 
 static_assert(
     [] {
@@ -889,7 +922,7 @@ static_assert(
         using namespace dsl;
         return transition_table{
             *"s1"_s + event<e1> = "s2"_s,
-            "s2"_s + event<e2> = X,
+             "s2"_s + event<e2> = X,
             // -------------------------
             *"s3"_s + event<e3> = X,
         };
@@ -958,10 +991,6 @@ static_assert(
       }();
     }(),
     "feature.dependencies");
-
-/**
- * Examples
- */
 
 static_assert(
     [] {
