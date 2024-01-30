@@ -246,8 +246,7 @@ class sm<TList<Transitions...>> {
   }
 
   template <class TEvent, class T>
-  constexpr auto process_event_1(const TEvent& event, auto& current_state,
-                                 meta::type_list<T>, auto&&... args) -> bool {
+  constexpr auto process_event_1(const TEvent& event, auto& current_state, meta::type_list<T>, auto&&... args) -> bool {
     if constexpr (T::src::size > 1) {
       return ids.template get<typename T::src>() == current_state and static_cast<T&>(transition_table_)(event, current_state, *this, args...);
     } else {
@@ -256,18 +255,13 @@ class sm<TList<Transitions...>> {
   }
 
   template <class TEvent, class... Ts>
-  constexpr auto process_event_1(const TEvent& event, auto& current_state,
-                                 meta::type_list<Ts...>, auto&&... args) -> bool {
+  constexpr auto process_event_1(const TEvent& event, auto& current_state, meta::type_list<Ts...>, auto&&... args) -> bool {
     return (process_event_1(event, current_state, meta::type_list<Ts>{}, args...) or ...);
   }
 
   template <class TEvent, auto... Rs>
-  constexpr auto process_event_N(const TEvent& event, const auto& transitions,
-                                 meta::index_sequence<Rs...>, auto&&... args)
-      -> bool {
-    return (process_event_1<TEvent>(event, current_state_[Rs], transitions,
-                                    args...) or
-            ...);
+  constexpr auto process_event_N(const TEvent& event, const auto& transitions, meta::index_sequence<Rs...>, auto&&... args) -> bool {
+    return (process_event_1<TEvent>(event, current_state_[Rs], transitions, args...) or ...);
   }
 
   [[no_unique_address]] TList<Transitions...> transition_table_{};
