@@ -19,14 +19,15 @@ export  // namespace
 
 // clang-format off
 /**
- * SML2
- * C++20 single header/module - https://raw.githubusercontent.com/boost-ext/sml2/main/sml2
- * No dependencies (Neither Boost nor STL is required) No 'virtual' used (-fno-rtti)
- * No `exceptions` required (-fno-exceptions)
- * Library tests itself at compile-time upon include/import Basically guaranteed no UB, no leaks
- * Optimized run-time execution - https://godbolt.org/z/y99L50
- * Fast compilation times
- * Declarative Domain Specific Language (DSL)
+ * SML2 - UML Declarative Domain Specific Language (DSL)
+ * - C++20 single header/module - https://raw.githubusercontent.com/boost-ext/sml2/main/sml2
+ * - No dependencies (Neither Boost nor STL is required)
+ * - No 'virtual' used (-fno-rtti)
+ * - No `exceptions` required (-fno-exceptions)
+ * - Library tests itself at compile-time upon include/import
+ * - Basically guaranteed no UB, no leaks
+ * - Optimized run-time execution - https://godbolt.org/z/y99L50
+ * - Fast compilation times - https://github.com/boost-ext/sml2/blob/main/.github/images/sml2.perf.png
  */
 // clang-format on
 namespace sml::inline v_2_0_0 {
@@ -74,6 +75,12 @@ struct fixed_string {
 };
 
 template <auto Size> fixed_string(const char (&)[Size]) -> fixed_string<Size>;
+
+static_assert(sizeof("") == fixed_string("").size);
+static_assert(sizeof("foo") == fixed_string("foo").size);
+static_assert('f' == fixed_string("foo").data[0]);
+static_assert('o' == fixed_string("foo").data[1]);
+static_assert('o' == fixed_string("foo").data[2]);
 }  // namespace meta
 
 namespace back {
@@ -249,7 +256,7 @@ class sm<TList<Transitions...>> {
   constexpr auto process_event_1(const TEvent& event, auto& current_state, meta::type_list<T>, auto&&... args) -> bool {
     if constexpr (T::src::size > 1) {
       return ids.template get<typename T::src>() == current_state and static_cast<T&>(transition_table_)(event, current_state, *this, args...);
-    } else {
+    } else { // any state
       return static_cast<T&>(transition_table_)(event, current_state, *this, args...);
     }
   }
@@ -409,7 +416,14 @@ struct transition {
 
 template<char... Cs> struct state {
   static constexpr auto size = sizeof...(Cs);
+  static constexpr char name[]{Cs..., 0};
+  static constexpr auto c_str() { return name; }
 };
+
+static_assert('f' == state<'f', 'o', 'o'>::c_str()[0]);
+static_assert('o' == state<'f', 'o', 'o'>::c_str()[1]);
+static_assert('o' == state<'f', 'o', 'o'>::c_str()[2]);
+static_assert(0 == state<'f', 'o', 'o'>::c_str()[3]);
 
 template <class... TEvents>
 inline constexpr auto event = transition<false, state<>, state<>, meta::type_list<TEvents...>>{};
@@ -485,8 +499,8 @@ constexpr auto otherwise = [] { return true; };
 constexpr auto _ = ""_s;   // any state
 constexpr auto X = "X"_s;  // terminate state
 constexpr auto process = [](const auto& event) {
-  return [event](auto& self, const auto&, auto&&...) {
-    self.process_event(event);
+  return [event](auto& self, const auto&, auto&&... args) {
+    self.process_event(event, args...);
   };
 };
 }  // namespace dsl
