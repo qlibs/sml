@@ -178,7 +178,7 @@ class sm<TList<Transitions...>> {
       []<auto...>{}.template operator()<
         set_transition<Transitions, Ns>(typename Transitions::event{})...,
         set_state<Ns, typename Transitions::src>()...,
-        set_state<Ns+int(sizeof...(Ns)), typename Transitions::dst>()...
+        set_state<Ns + int(sizeof...(Ns)), typename Transitions::dst>()...
       >();
     }(meta::make_index_sequence<sizeof...(Transitions)>{}), true)
   );
@@ -199,12 +199,9 @@ class sm<TList<Transitions...>> {
     if constexpr (num_of_regions == 0u) {
       return process_event_0<TEvent>(event, transitions, args...);
     } else if constexpr (num_of_regions == 1u) {
-      return process_event_1<TEvent>(event, current_state_[0], transitions,
-                                     args...);
+      return process_event_1<TEvent>(event, current_state_[0], transitions, args...);
     } else {
-      return process_event_N<TEvent>(
-          event, transitions, meta::make_index_sequence<num_of_regions>{},
-          args...);
+      return process_event_N<TEvent>(event, transitions, meta::make_index_sequence<num_of_regions>{}, args...);
     }
   }
 
@@ -247,8 +244,7 @@ class sm<TList<Transitions...>> {
   }
 
   template <class TEvent, class... Ts>
-  constexpr auto process_event_0(const TEvent& event, meta::type_list<Ts...>,
-                                 auto&&... args) -> bool {
+  constexpr auto process_event_0(const TEvent& event, meta::type_list<Ts...>, auto&&... args) -> bool {
     return (process_event_0(event, meta::type_list<Ts>{}, args...) or ...);
   }
 
