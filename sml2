@@ -341,7 +341,8 @@ struct transition {
   }
 
   [[nodiscard]] constexpr auto operator()(const back::on_entry& event, [[maybe_unused]] auto& current_state, auto& self, auto&&... args) -> bool {
-    if constexpr (using R = decltype(invoke(guard, event, self, args...)); requires { R::value; }) {
+    using R = decltype(invoke(guard, event, self, args...));
+    if constexpr ( requires { R::value; }) {
       if constexpr (R::value) {
         invoke(action, event, self, args...);
         static_assert(not dst::size, "[E002] on_entry can't have dst state!");
@@ -358,7 +359,8 @@ struct transition {
   }
 
   [[nodiscard]] constexpr auto operator()(const back::on_exit& event, [[maybe_unused]] auto& current_state, auto& self, auto&&... args) -> bool {
-    if constexpr (using R = decltype(invoke(guard, event, self, args...)); requires { R::value; }) {
+    using R = decltype(invoke(guard, event, self, args...));
+    if constexpr ( requires { R::value; }) {
       if constexpr (R::value) {
         invoke(action, event, self, args...);
         static_assert(not dst::size, "[E003] on_exit can't have dst state!");
@@ -378,7 +380,8 @@ struct transition {
   [[nodiscard]] constexpr auto operator()(const auto& event,
                                           [[maybe_unused]] auto& current_state,
                                           TSelf& self, auto&&... args) -> bool {
-    if constexpr (using R = decltype(invoke(guard, event, self, args...)); requires { R::value; }) {
+    using R = decltype(invoke(guard, event, self, args...));
+    if constexpr (requires { R::value; }) {
       if constexpr (R::value) {
         if constexpr (dst::size) {
           process_event(self, back::on_exit{}, args...);
@@ -555,6 +558,7 @@ static_assert(
 
       sm sm = [&] {
         using namespace dsl;
+        constexpr auto on_entry = dsl::on_entry;
         return transition_table{
             *"idle"_s + on_entry / [&] { ++on_entry_calls; }
         };
@@ -577,6 +581,8 @@ static_assert(
 
       sm sm = [&] {
         using namespace dsl;
+        constexpr auto on_entry = dsl::on_entry;
+        constexpr auto on_exit = dsl::on_exit;
         return transition_table{
             *"s1"_s + event<e1> = "s2"_s,
              "s2"_s + on_entry / [&] { ++on_entry_calls; },
@@ -603,6 +609,8 @@ static_assert(
 
       sm sm = [&] {
         using namespace dsl;
+        constexpr auto on_entry = dsl::on_entry;
+        constexpr auto on_exit = dsl::on_exit;
         return transition_table{
             *"s1"_s + event<e1> = "s2"_s,
              "s2"_s + event<e2>,
