@@ -112,9 +112,7 @@ int main() {
 
 - Can I disable running tests upon use?
 
-    > No. Running compile-time tests upon import/include is essential and one of the main goals of the project and can't be disabled.
-      In order to maintain correctness guarantees the tests have to be constantly run as there is no way to verify all
-      aspects of changing underlying environment.
+    > Yes. Define `SML2_DISABLE_STATIC_ASSERT_TESTS`.  Running compile-time tests upon import/include is essential for correctness, though, so use with cautious.
 
 - What features enables the fast compile time times and running tests upon use?
 
@@ -222,14 +220,6 @@ int main() {
 - Is there a Rust version?
 
     > Sort of, experimental, with limited features Rust version of SML can be found here - https://gist.github.com/krzysztof-jusiak/079f80e9d8c472b2c8d515cbf07ad665
-
-- How can I contribute?
-
-    > Please follow [CONTRIBUTING.md](.github/CONTRIBUTING.md)
-
-- How to report a bug?
-
-    > Please follow [PULL_REQUEST_TEMPLATE.md](.github/PULL_REQUEST_TEMPLATE.md)
 
 ---
 

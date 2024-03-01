@@ -8,16 +8,10 @@
 #if __cplusplus < 202002L
 #error "SML2 requires C++20 support (Clang-15+, GCC-12+)"
 #else
-#if defined(__cpp_modules)
-export module sml;
-export  // namespace
-#else
 #ifndef SML2
 #define SML2 2'0'0
 #pragma GCC system_header  // -Wnon-template-friend
-#endif
 
-// clang-format off
 /**
  * SML2 - UML Declarative Domain Specific Language (DSL)
  * - C++20 single header/module - https://raw.githubusercontent.com/boost-ext/sml2/main/sml2
@@ -29,7 +23,6 @@ export  // namespace
  * - Optimized run-time execution - https://godbolt.org/z/j51Tch6PT
  * - Fast compilation times - https://github.com/boost-ext/sml2/blob/main/.github/images/sml2.perf.png
  */
-// clang-format on
 namespace sml::inline v_2_0_0 {
 namespace meta {
 template <class...>
@@ -57,27 +50,24 @@ static_assert(__is_same(type_list<int, float>, decltype(append<int, float>(type_
 static_assert(__is_same(type_list<int, float>, decltype(append<float>(type_list<int>{}))));
 static_assert(__is_same(type_list<float, int>, decltype(append<int>(type_list<float>{}))));
 
-template <class T>
-auto declval() -> T&&;
+template <class T> auto declval() -> T&&;
 
 template <auto Size>
 struct fixed_string {
-  static constexpr auto size = Size;
-
   constexpr fixed_string() = default;
   constexpr explicit(false) fixed_string(const char (&str)[Size]) {
-    for (auto i = 0u; i < Size; ++i) {
-      data[i] = str[i];
-    }
+    for (auto i = 0u; i < Size; ++i) { data[i] = str[i]; }
   }
+
+  static constexpr auto size() { return Size; }
 
   char data[Size]{};
 };
 
 template <auto Size> fixed_string(const char (&)[Size]) -> fixed_string<Size>;
 
-static_assert(sizeof("") == fixed_string("").size);
-static_assert(sizeof("foo") == fixed_string("foo").size);
+static_assert(sizeof("") == fixed_string("").size());
+static_assert(sizeof("foo") == fixed_string("foo").size());
 static_assert('f' == fixed_string("foo").data[0]);
 static_assert('o' == fixed_string("foo").data[1]);
 static_assert('o' == fixed_string("foo").data[2]);
@@ -433,7 +423,7 @@ template <meta::fixed_string State>
 [[nodiscard]] constexpr auto operator""_s() {
   return []<auto... Ns>(meta::index_sequence<Ns...>) {
     return transition<false, state<State.data[Ns]...>, state<>>{};
-  }(meta::make_index_sequence<State.size>{});
+  }(meta::make_index_sequence<State.size()>{});
 }
 
 [[nodiscard]] constexpr auto operator,(const concepts::invocable auto& lhs,
@@ -505,574 +495,493 @@ constexpr auto process = [](const auto& event) {
 }  // namespace dsl
 }  // namespace sml::inline v_2_0_0
 
-static_assert(
-    [] {
-      using namespace sml;
-
-      struct e1 {};
-
-      struct test {
-        constexpr auto operator()() const {
-          using namespace dsl;
-          return transition_table{
-              *"s1"_s + event<e1> = "s2"_s,
-          };
-        }
-      };
-
-      using dsl::operator""_s;
-
-      test t;
-      sm sm1{t};
-      sm sm2{test{}};
-      return sm1.is("s1"_s) and sm1.process_event(e1{}) and sm1.is("s2"_s) and
-             sm2.is("s1"_s) and sm2.process_event(e1{}) and sm2.is("s2"_s);
-    }(),
-    "feature.ctor");
-
-static_assert(
-    [] {
-      using namespace sml;
-
-      struct e1 {};
-
-      sm sm = [] {
-        using namespace dsl;
-        return transition_table{
-            *"s1"_s + event<e1> = "s2"_s,
-        };
-      };
-
-      using dsl::operator""_s;
-      return sm.process_event(e1{}) and sm.is("s2"_s);
-    }(),
-    "feature.process_event");
-
-static_assert(
-    [] {
-      using namespace sml;
-
-      struct e1 {};
-
-      int on_entry_calls{};
-
-      sm sm = [&] {
-        using namespace dsl;
-        constexpr auto on_entry = dsl::on_entry;
-        return transition_table{
-            *"idle"_s + on_entry / [&] { ++on_entry_calls; }
-        };
-      };
-
-      using dsl::operator""_s;
-      return sm.is("idle"_s) and on_entry_calls == 1;
-    }(),
-    "feature.start[on_entry]");
-
-static_assert(
-    [] {
-      using namespace sml;
-
-      struct e1 {};
-      struct e2 {};
-
-      int on_entry_calls{};
-      int on_exit_calls{};
-
-      sm sm = [&] {
-        using namespace dsl;
-        constexpr auto on_entry = dsl::on_entry;
-        constexpr auto on_exit = dsl::on_exit;
-        return transition_table{
-            *"s1"_s + event<e1> = "s2"_s,
-             "s2"_s + on_entry / [&] { ++on_entry_calls; },
-             "s2"_s + on_exit / [&] { ++on_exit_calls; },
-             "s2"_s + event<e2> = "s3"_s,
-        };
-      };
-
-      using dsl::operator""_s;
-      return sm.process_event(e1{}) and sm.is("s2"_s) and on_entry_calls == 1 and on_exit_calls == 0 and
-             sm.process_event(e2{}) and on_entry_calls == 1 and on_exit_calls == 1 and sm.is("s3"_s);
-    }(),
-    "feature.process_event[on_entry/on_exit]");
-
-static_assert(
-    [] {
-      using namespace sml;
-
-      struct e1 {};
-      struct e2 {};
-
-      int on_entry_calls{};
-      int on_exit_calls{};
-
-      sm sm = [&] {
-        using namespace dsl;
-        constexpr auto on_entry = dsl::on_entry;
-        constexpr auto on_exit = dsl::on_exit;
-        return transition_table{
-            *"s1"_s + event<e1> = "s2"_s,
-             "s2"_s + event<e2>,
-             "s2"_s + on_entry / [&] { ++on_entry_calls; },
-             "s2"_s + on_exit / [&] { ++on_exit_calls; },
-        };
-      };
-
-      using dsl::operator""_s;
-      return sm.process_event(e1{}) and sm.is("s2"_s) and on_entry_calls == 1 and on_exit_calls == 0 and
-             sm.process_event(e2{}) and on_entry_calls == 1 and on_exit_calls == 0 and sm.is("s2"_s);
-    }(),
-    "feature.process_event[on_entry/on_exit] with internal transitions");
-
-static_assert(
-    [] {
-      using namespace sml;
-
-      struct e1 {};
-
-      sm sm = [] {
-        using namespace dsl;
-        return transition_table{
-            *"s1"_s + event<e1> = "s2"_s,
-            "s2"_s + event<e1> = "s3"_s,
-        };
-      };
-
-      using dsl::operator""_s;
-      return sm.process_event(e1{}) and sm.is("s2"_s) and
-             sm.process_event(e1{}) and sm.is("s3"_s);
-    }(),
-    "feature.process_event[same event multiple times]");
-
-static_assert(
-    [] {
-      using namespace sml;
-
-      struct e {
-        int value{};
-      };
-      unsigned value{};
-
-      sm sm = [&] {
-        using namespace dsl;
-        auto action = [&](const auto& event, auto... args) {
-          value += event.value + (args + ...);
-        };
-        return transition_table{
-            *"s1"_s + event<e> / action,
-        };
-      };
-
-      using dsl::operator""_s;
-      return sm.process_event(e{.value = 1}, 2, 3) and 6 == value;
-    }(),
-    "feature.process_event[with parameters]");
-
-static_assert(
-    [] {
-      using namespace sml;
-
-      struct e1 {};
-      struct e2 {};
-      struct e {
-        int value{};
-      };
-
-      sm sm = [] {
-        using namespace dsl;
-        return transition_table{
-            *"s1"_s + event<e1> = "s2"_s,
-            "s2"_s + event<e2> = "s3"_s,
-            "s3"_s + event<e2> = X,
-            _ + event<e> = "s1"_s,
-        };
-      };
-
-      using dsl::operator""_s;
-
-      return sm.process_event(e1{}) and sm.is("s2"_s) and
-
-             sm.process_event(e{{}}) and                       // _ -> s1
-             sm.is("s1"_s) and not sm.process_event(e2{}) and  // ignored
-             sm.is("s1"_s) and
-
-             sm.process_event(e1{}) and  // s1 -> s2
-             sm.is("s2"_s) and
-
-             sm.process_event(e2{}) and  // s2 -> s3
-             sm.is("s3"_s) and
-
-             sm.process_event(e{}) and  // _ -> s1
-             sm.is("s1"_s);
-    }(),
-    "feature.process_event[different events in any state]");
-
-static_assert(
-    [] {
-      using namespace sml;
-      struct unexpected {};
-      struct e1 {};
-
-      sm sm = [] {
-        using namespace dsl;
-        return transition_table{
-            *"s1"_s + event<e1> = "s2"_s,
-        };
-      };
-
-      constexpr auto process_event = [](auto event) {
-        return requires { sm.process_event(event); };
-      };
-
-      static_assert(process_event(e1{}));
-      static_assert(not process_event(unexpected{}));
-      return true;
-    }(),
-    "feature.proces_event[unexpected event]");
-
-static_assert(
-    [] {
-      using namespace sml;
-
-      struct e1 {};
-      struct e2 {};
-
-      const auto test = [] {
-        using namespace dsl;
-        return transition_table{
-            *"s1"_s + event<e1, e2> = "s2"_s,
-        };
-      };
-
-      using dsl::operator""_s;
-
-      return [&] {
-        sm sm{test};
-        return sm.is("s1"_s) and sm.process_event(e1{}) and sm.is("s2"_s);
-      }() and [&] {
-        sm sm{test};
-        return sm.is("s1"_s) and sm.process_event(e2{}) and sm.is("s2"_s);
-      }();
-    }(),
-    "feature.events[multiple events]");
-
-static_assert(
-    [] {
-      using namespace sml;
-
-      struct e1 {};
-      struct e2 {};
-
-      const auto test = [] {
-        using namespace dsl;
-        return transition_table{
-            *"idle"_s + event<e1> / [] {} = "s1"_s,
-            "s1"_s + event<e1> / [] {} = "s2"_s,
-            "s2"_s + event<e1> / [] {} = "idle"_s,
-        };
-      };
-
-      sm sm{test};
-      using dsl::operator""_s;
-      return sm.is("idle"_s) and sm.process_event(e1{}) and sm.is("s1"_s) and
-             sm.process_event(e1{}) and sm.is("s2"_s) and
-             sm.process_event(e1{}) and sm.is("idle"_s);
-    }(),
-    "feature.events[same event transitions]");
-
-static_assert(
-    [] {
-      using namespace sml;
-
-      struct e1 {};
-      struct e2 {};
-
-      sm sm = [] {
-        using namespace dsl;
-        return transition_table{
-            *"s1"_s + event<e1> = "s2"_s,
-            "s2"_s + event<e2> = "s1"_s,
-        };
-      };
-
-      using dsl::operator""_s;
-
-      return sm.is("s1"_s) and sm.process_event(e1{}) and sm.is("s2"_s) and
-             not sm.process_event(e1{}) and sm.is("s2"_s) and
-             sm.process_event(e2{}) and sm.is("s1"_s);
-    }(),
-    "feature.transition_table[multiple transitions]");
-
-static_assert(
-    [] {
-      using namespace sml;
-
-      struct e1 {};
-
-      sm sm = [] {
-        using namespace dsl;
-        return transition_table{
-            *"s1"_s + event<e1> = X,
-        };
-      };
-
-      using dsl::operator""_s;
-      using dsl::X;
-      return sm.is("s1"_s) and sm.process_event(e1{}) and sm.is(X) and
-             not sm.process_event(e1{});
-    }(),
-    "feature.transition_table[terminated state]");
-
-static_assert(
-    [] {
-      using namespace sml;
-
-      struct e {
-        int value;
-      };
-
-      unsigned calls{};
-
-      sm sm = [&] {
-        using namespace dsl;
-        auto guard = [](const auto& event) { return event.value; };
-        auto action = [&] { ++calls; };
-        return transition_table{
-            *"s1"_s + event<e>[guard and (guard or guard)] / (action, action) =
-                "s2"_s,
-        };
-      };
-
-      using dsl::operator""_s;
-      return not sm.process_event(e{false}) and sm.is("s1"_s) and
-             sm.process_event(e{true}) and sm.is("s2"_s);
-    }(),
-    "feature.transition_table[guards/actions]");
-
-static_assert(
-    [] {
-      using namespace sml;
-
-      struct e {
-        int value{};
-      };
-
-      sm sm = [&] {
-        using namespace dsl;
-        constexpr auto guard = [](const auto& event) { return event.value; };
-        return transition_table{
-            *"s1"_s + event<e>[guard] = "s2"_s,
-            "s1"_s + event<e>[otherwise] = "s3"_s,
-        };
-      };
-
-      using dsl::operator""_s;
-      return sm.process_event(e{false}) and sm.is("s3"_s);
-    }(),
-    "feature.transition_table[otherwise guard]");
-
-namespace sml::test {
-template<auto Value>
+#if not defined(SML2_DISABLE_STATIC_ASSERT_TESTS)
+namespace SML_TEST {
+template<auto V>
 struct bool_constant {
-  static constexpr auto value = Value;
+  static constexpr auto value = V;
 };
-} // sml::test
+} // SML_TEST
 
-static_assert(
-    [] {
-      using namespace sml;
+static_assert(([] {
+  constexpr auto expect = [](const bool cond) { bool _[1]{true}; return _[not cond]; };
 
-      struct e1 {
-        int value{};
-      };
-      struct e2 {};
+  using namespace sml;
+  using dsl::operator""_s;
 
-      unsigned value{};
+  struct e1 {};
+  struct e2 {};
+  struct e3 {};
+  struct e { int value{}; };
+  struct unexpected {};
 
-      sm sm = [&] {
-        using namespace dsl;
-        auto ct_guard = [](const auto& event) {
-          return sml::test::bool_constant<requires { event.value; }>{};
-        };
-        auto action = [&](const auto& event) { value += event.value; };
-        return transition_table{
-            *"s1"_s + event<e1>[ct_guard] / action,
-            "s1"_s + event<e2>[ct_guard] / action,
-        };
-      };
-
-      using dsl::operator""_s;
-      return 0 == value and sm.process_event(e1{.value = 42}) and
-             42 == value and not sm.process_event(e2{}) and 42 == value;
-    }(),
-    "feature.transition_table[constexpr guards]");
-
-static_assert(
-    [] {
-      using namespace sml;
-
-      struct e1 {};
-      struct e2 {};
-
-      sm sm = [] {
-        using namespace dsl;
-        return transition_table{
-            *"s1"_s + event<e1> / process(e2{}) = "s2"_s,
-            "s2"_s + event<e2> = "s3"_s,
-        };
-      };
-
-      using dsl::operator""_s;
-      return sm.process_event(e1{}) and sm.is("s3"_s);
-    }(),
-    "feature.transition_table[process]");
-
-static_assert(
-    [] {
-      using namespace sml;
-
-      struct e1 {};
-      struct e2 {};
-
-      sm sm = [] {
+  // ctor
+  {
+    struct test {
+      constexpr auto operator()() const {
         using namespace dsl;
         return transition_table{
             *"s1"_s + event<e1> = "s2"_s,
-            *"s3"_s + event<e2> = "s4"_s,
         };
+      }
+    };
+
+    test t;
+    sm sm1{t};
+    sm sm2{test{}};
+    expect(sm1.is("s1"_s));
+    expect(sm1.process_event(e1{}));
+    expect(sm1.is("s2"_s));
+    expect(sm2.is("s1"_s));
+    expect(sm2.process_event(e1{}));
+    expect(sm2.is("s2"_s));
+  }
+
+  // process_event
+  {
+    sm sm = [] {
+      using namespace dsl;
+      return transition_table{
+          *"s1"_s + event<e1> = "s2"_s,
       };
+    };
 
-      using dsl::operator""_s;
-      return sm.is("s1"_s, "s3"_s) and sm.process_event(e1{}) and
-             sm.is("s2"_s, "s3"_s) and sm.process_event(e2{}) and
-             sm.is("s2"_s, "s4"_s);
-    }(),
-    "feature.transition_table[orthogonal regions]");
+    expect(sm.process_event(e1{}));
+    expect(sm.is("s2"_s));
+  }
 
-static_assert(
-    [] {
-      using namespace sml;
+  // start[on_entry]
+  {
+    int on_entry_calls{};
 
-      struct e1 {};
-      struct e2 {};
-      struct e3 {};
-
-      sm sm = [] {
-        using namespace dsl;
-        return transition_table{
-            *"s1"_s + event<e1> = "s2"_s,
-             "s2"_s + event<e2> = X,
-            // -------------------------
-            *"s3"_s + event<e3> = X,
-        };
+    sm sm = [&] {
+      using namespace dsl;
+      constexpr auto on_entry = dsl::on_entry;
+      return transition_table{
+          *"idle"_s + on_entry / [&] { ++on_entry_calls; }
       };
+    };
 
-      using dsl::operator""_s;
-      using dsl::X;
-      return sm.is("s1"_s, "s3"_s) and sm.process_event(e1{}) and
-             sm.is("s2"_s, "s3"_s) and sm.process_event(e2{}) and
-             sm.is(X, "s3"_s) and sm.process_event(e3{}) and sm.is(X, X);
-    }(),
-    "feature.transition_table[orthogonal regions]");
+    expect(sm.is("idle"_s));
+    expect(on_entry_calls == 1);
+  }
 
-static_assert(
-    [] {
-      using namespace sml;
+  // process_event[on_entry/on_exit]
+  {
+    int on_entry_calls{};
+    int on_exit_calls{};
 
-      struct e1 {};
-      struct e2 {};
+    sm sm = [&] {
+      using namespace dsl;
+      constexpr auto on_entry = dsl::on_entry;
+      constexpr auto on_exit = dsl::on_exit;
+      return transition_table{
+          *"s1"_s + event<e1> = "s2"_s,
+           "s2"_s + on_entry / [&] { ++on_entry_calls; },
+           "s2"_s + on_exit / [&] { ++on_exit_calls; },
+           "s2"_s + event<e2> = "s3"_s,
+      };
+    };
 
-      unsigned calls{};
-      auto guard = [] { return true; };
+    expect(sm.process_event(e1{}));
+    expect(sm.is("s2"_s));
+    expect(on_entry_calls == 1);
+    expect(on_exit_calls == 0);
+    expect(sm.process_event(e2{}));
+    expect(on_entry_calls == 1);
+    expect(on_exit_calls == 1);
+    expect(sm.is("s3"_s));
+  }
+
+  // process_event[on_entry/on_exit] with internal transitions
+  {
+    int on_entry_calls{};
+    int on_exit_calls{};
+
+    sm sm = [&] {
+      using namespace dsl;
+      constexpr auto on_entry = dsl::on_entry;
+      constexpr auto on_exit = dsl::on_exit;
+      return transition_table{
+          *"s1"_s + event<e1> = "s2"_s,
+           "s2"_s + event<e2>,
+           "s2"_s + on_entry / [&] { ++on_entry_calls; },
+           "s2"_s + on_exit / [&] { ++on_exit_calls; },
+      };
+    };
+
+    expect(sm.process_event(e1{}));
+    expect(sm.is("s2"_s));
+    expect(on_entry_calls == 1);
+    expect(on_exit_calls == 0);
+    expect(sm.process_event(e2{}));
+    expect(on_entry_calls == 1);
+    expect(on_exit_calls == 0);
+    expect(sm.is("s2"_s));
+  }
+
+  // process_event[same event multiple times]
+  {
+    sm sm = [] {
+      using namespace dsl;
+      return transition_table{
+          *"s1"_s + event<e1> = "s2"_s,
+          "s2"_s + event<e1> = "s3"_s,
+      };
+    };
+
+    expect(sm.process_event(e1{}));
+    expect(sm.is("s2"_s));
+    expect(sm.process_event(e1{}));
+    expect(sm.is("s3"_s));
+  }
+
+  // process_event[with parameters]
+  {
+    unsigned value{};
+
+    sm sm = [&] {
+      using namespace dsl;
+      auto action = [&](const auto& event, auto... args) {
+        value += event.value + (args + ...);
+      };
+      return transition_table{
+          *"s1"_s + event<e> / action,
+      };
+    };
+
+    expect(sm.process_event(e{.value = 1}, 2, 3));
+    expect(6 == value);
+  }
+
+  // process_event[different events in any state]
+  {
+    sm sm = [] {
+      using namespace dsl;
+      return transition_table{
+          *"s1"_s + event<e1> = "s2"_s,
+          "s2"_s + event<e2> = "s3"_s,
+          "s3"_s + event<e2> = X,
+          _ + event<e> = "s1"_s,
+      };
+    };
+
+    expect(sm.process_event(e1{}));
+    expect(sm.is("s2"_s));
+
+    expect(sm.process_event(e{{}}));
+    expect(sm.is("s1"_s));
+    expect(not sm.process_event(e2{}));  // ignored
+    expect(sm.is("s1"_s));
+
+    expect(sm.process_event(e1{}));  // s1 -> s2
+    expect(sm.is("s2"_s));
+
+    expect(sm.process_event(e2{}));  // s2 -> s3
+    expect(sm.is("s3"_s));
+
+    expect(sm.process_event(e{}));  // _ -> s1
+    expect(sm.is("s1"_s));
+  }
+
+  // proces_event[unexpected event]
+  {
+    sm sm = [] {
+      using namespace dsl;
+      return transition_table{
+          *"s1"_s + event<e1> = "s2"_s,
+      };
+    };
+
+    constexpr auto process_event = [](auto event) {
+      return requires { sm.process_event(event); };
+    };
+
+    static_assert(process_event(e1{}));
+    static_assert(not process_event(unexpected{}));
+  }
+
+  // events[multiple events]
+  {
+    const auto test = [] {
+      using namespace dsl;
+      return transition_table{
+          *"s1"_s + event<e1, e2> = "s2"_s,
+      };
+    };
+
+    {
+      sm sm{test};
+      expect(sm.is("s1"_s));
+      expect(sm.process_event(e1{}));
+      expect(sm.is("s2"_s));
+    }
+
+    {
+      sm sm{test};
+      expect(sm.is("s1"_s));
+      expect(sm.process_event(e2{}));
+      expect(sm.is("s2"_s));
+    }
+  }
+
+  // events[same event transitions]
+  {
+    const auto test = [] {
+      using namespace dsl;
+      return transition_table{
+         *"idle"_s + event<e1> / [] {} = "s1"_s,
+          "s1"_s   + event<e1> / [] {} = "s2"_s,
+          "s2"_s   + event<e1> / [] {} = "idle"_s,
+      };
+    };
+
+    sm sm{test};
+    expect(sm.is("idle"_s));
+    expect(sm.process_event(e1{}));
+    expect(sm.is("s1"_s));
+    expect(sm.process_event(e1{}));
+    expect(sm.is("s2"_s));
+    expect(sm.process_event(e1{}));
+    expect(sm.is("idle"_s));
+  }
+
+  // transition_table[multiple transitions]
+  {
+    sm sm = [] {
+      using namespace dsl;
+      return transition_table{
+          *"s1"_s + event<e1> = "s2"_s,
+           "s2"_s + event<e2> = "s1"_s,
+      };
+    };
+
+    expect(sm.is("s1"_s));
+    expect(sm.process_event(e1{}));
+    expect(sm.is("s2"_s));
+    expect(not sm.process_event(e1{}));
+    expect(sm.is("s2"_s));
+    expect(sm.process_event(e2{}));
+    expect(sm.is("s1"_s));
+  }
+
+  // transition_table[terminated state]
+  {
+    sm sm = [] {
+      using namespace dsl;
+      return transition_table{
+          *"s1"_s + event<e1> = X,
+      };
+    };
+
+    using dsl::X;
+    expect(sm.is("s1"_s));
+    expect(sm.process_event(e1{}));
+    expect(sm.is(X));
+    expect(not sm.process_event(e1{}));
+  }
+
+  // transition_table[guards/actions]
+  {
+    unsigned calls{};
+
+    sm sm = [&] {
+      using namespace dsl;
+      auto guard = [](const auto& event) { return event.value; };
       auto action = [&] { ++calls; };
+      return transition_table{
+          *"s1"_s + event<e>[guard and (guard or guard)] / (action, action) = "s2"_s,
+      };
+    };
 
-      sm sm = [=] {
+    using dsl::operator""_s;
+    expect(not sm.process_event(e{false}));
+    expect(sm.is("s1"_s));
+    expect(sm.process_event(e{true}));
+    expect(sm.is("s2"_s));
+  }
+
+  // transition_table[otherwise guard]
+  {
+    sm sm = [&] {
+      using namespace dsl;
+      constexpr auto guard = [](const auto& event) { return event.value; };
+      return transition_table{
+          *"s1"_s + event<e>[guard] = "s2"_s,
+          "s1"_s + event<e>[otherwise] = "s3"_s,
+      };
+    };
+
+    expect(sm.process_event(e{false}));
+    expect(sm.is("s3"_s));
+  }
+
+  // transition_table[constexpr guards]
+  {
+    struct e1 { int value{}; };
+    unsigned value{};
+
+    sm sm = [&] {
+      using namespace dsl;
+      auto ct_guard = [](const auto& event) {
+        return SML_TEST::bool_constant<requires { event.value; }>{};
+      };
+      auto action = [&](const auto& event) { value += event.value; };
+      return transition_table{
+          *"s1"_s + event<e1>[ct_guard] / action,
+          "s1"_s + event<e2>[ct_guard] / action,
+      };
+    };
+
+    expect(0 == value);
+    expect(sm.process_event(e1{.value = 42}));
+    expect(42 == value);
+    expect(not sm.process_event(e2{}));
+    expect(42 == value);
+  }
+
+  // transition_table[process]
+  {
+    sm sm = [] {
+      using namespace dsl;
+      return transition_table{
+          *"s1"_s + event<e1> / process(e2{}) = "s2"_s,
+          "s2"_s + event<e2> = "s3"_s,
+      };
+    };
+
+    expect(sm.process_event(e1{}));
+    expect(sm.is("s3"_s));
+  }
+
+  // transition_table[orthogonal regions]
+  {
+    sm sm = [] {
+      using namespace dsl;
+      return transition_table{
+          *"s1"_s + event<e1> = "s2"_s,
+          *"s3"_s + event<e2> = "s4"_s,
+      };
+    };
+
+    expect(sm.is("s1"_s, "s3"_s));
+    expect(sm.process_event(e1{}));
+    expect(sm.is("s2"_s, "s3"_s));
+    expect(sm.process_event(e2{}));
+    expect(sm.is("s2"_s, "s4"_s));
+  }
+
+  // transition_table[orthogonal regions]
+  {
+    sm sm = [] {
+      using namespace dsl;
+      return transition_table{
+          *"s1"_s + event<e1> = "s2"_s,
+           "s2"_s + event<e2> = X,
+          // -------------------------
+          *"s3"_s + event<e3> = X,
+      };
+    };
+
+    using dsl::X;
+    expect(sm.is("s1"_s, "s3"_s));
+    expect(sm.process_event(e1{}));
+    expect(sm.is("s2"_s, "s3"_s));
+    expect(sm.process_event(e2{}));
+    expect(sm.is(X, "s3"_s));
+    expect(sm.process_event(e3{}));
+    expect(sm.is(X, X));
+  }
+
+  // dispatch_table
+  {
+    unsigned calls{};
+    auto guard = [] { return true; };
+    auto action = [&] { ++calls; };
+
+    sm sm = [=] {
+      using namespace dsl;
+      return dispatch_table{
+          event<e1>[guard] / action,
+          event<e2>[guard] / action,
+      };
+    };
+
+    using dsl::operator""_s;
+    expect(0 == calls);
+    expect(sm.process_event(e1{}));
+    expect(1 == calls);
+    expect(sm.process_event(e2{}));
+    expect(2 == calls);
+  }
+
+  // dependencies
+  {
+    struct s {
+      bool value{};
+
+      constexpr auto operator()() const {
         using namespace dsl;
-        return dispatch_table{
-            event<e1>[guard] / action,
-            event<e2>[guard] / action,
+        auto guard = [this] { return value; };
+        return transition_table{
+            *"s1"_s + event<e1>[guard] = "s2"_s,
         };
-      };
+      }
+    };
 
-      using dsl::operator""_s;
-      return 0 == calls and sm.process_event(e1{}) and 1 == calls and
-             sm.process_event(e2{}) and 2 == calls;
-    }(),
-    "feature.dispatch_table");
+    {
+      s s{};
+      sm sm{s};
+      expect(not sm.process_event(e1{}));
+      expect(sm.is("s1"_s));
+    }
 
-static_assert(
-    [] {
-      using namespace sml;
+    {
+      s s{true};
+      sm sm{s};
+      expect(sm.process_event(e1{}));
+      expect(sm.is("s2"_s));
+    }
+  }
 
-      struct e1 {};
+  // example.connection
+  {
+    struct connect {};
+    struct established {};
+    struct ping {};
+    struct disconnect {};
+    struct timeout {};
 
-      struct s {
-        bool value{};
+    struct Connection {
+      constexpr auto operator()() const {
+        constexpr auto establish = [] {};
+        constexpr auto close = [] {};
+        constexpr auto is_valid = [](auto const&) { return true; };
+        constexpr auto reset_timeout = [] {};
 
-        constexpr auto operator()() const {
-          using namespace dsl;
-          auto guard = [this] { return value; };
-          return transition_table{
-              *"s1"_s + event<e1>[guard] = "s2"_s,
-          };
-        }
-      };
+        using namespace sml::dsl;
+        return transition_table{
+            *"Disconnected"_s + event<connect> / establish = "Connecting"_s,
+             "Connecting"_s + event<established> = "Connected"_s,
+             "Connected"_s + event<ping>[is_valid] / reset_timeout,
+             "Connected"_s + event<timeout> / establish = "Connecting"_s,
+             "Connected"_s + event<disconnect> / close = "Disconnected"_s,
+        };
+      }
+    };
 
-      using dsl::operator""_s;
-      return [&] {
-        s s{};
-        sm sm{s};
-        return not sm.process_event(e1{}) and sm.is("s1"_s);
-      }() and [&] {
-        s s{true};
-        sm sm{s};
-        return sm.process_event(e1{}) and sm.is("s2"_s);
-      }();
-    }(),
-    "feature.dependencies");
-
-static_assert(
-    [] {
-      struct connect {};
-      struct established {};
-      struct ping {};
-      struct disconnect {};
-      struct timeout {};
-
-      struct Connection {
-        constexpr auto operator()() const {
-          constexpr auto establish = [] {};
-          constexpr auto close = [] {};
-          constexpr auto is_valid = [](auto const&) { return true; };
-          constexpr auto reset_timeout = [] {};
-
-          using namespace sml::dsl;
-          return transition_table{
-              *"Disconnected"_s + event<connect> / establish = "Connecting"_s,
-              "Connecting"_s + event<established> = "Connected"_s,
-              "Connected"_s + event<ping>[is_valid] / reset_timeout,
-              "Connected"_s + event<timeout> / establish = "Connecting"_s,
-              "Connected"_s + event<disconnect> / close = "Disconnected"_s,
-          };
-        }
-      };
-
-      sml::sm connection{Connection{}};
-      using sml::dsl::operator""_s;
-      return connection.is("Disconnected"_s) and
-             connection.process_event(connect{}) and
-             connection.is("Connecting"_s) and
-             connection.process_event(established{}) and
-             connection.is("Connected"_s) and
-             connection.process_event(ping{}) and
-             connection.is("Connected"_s) and
-             connection.process_event(disconnect{}) and
-             connection.is("Disconnected"_s);
-    }(),
-    "example.connection");
-
-#if not defined(__cpp_modules)
-#endif  // SML2
-#endif
-#endif
+    sml::sm connection{Connection{}};
+    expect(connection.is("Disconnected"_s));
+    expect(connection.process_event(connect{}));
+    expect(connection.is("Connecting"_s));
+    expect(connection.process_event(established{}));
+    expect(connection.is("Connected"_s));
+    expect(connection.process_event(ping{}));
+    expect(connection.is("Connected"_s));
+    expect(connection.process_event(disconnect{}));
+    expect(connection.is("Disconnected"_s));
+  }
+}(), true));
+#endif // SML2_DISABLE_STATIC_ASSERT_TESTS
+#endif // SML2
+#endif // __cplusplus
