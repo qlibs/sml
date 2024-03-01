@@ -7,8 +7,8 @@
 
 ### SML2 (UML-2.5 State Machine Language)
 
-* C++20 ([Clang-15+](https://godbolt.org/z/W9rP94cYK), [GCC-12+](https://godbolt.org/z/W9rP94cYK))
-* Single header/module - https://raw.githubusercontent.com/boost-ext/sml2/main/sml2
+* C++20 ([Clang-15+, GCC-12+](https://godbolt.org/z/eorGK5sEW))
+* Single header - https://raw.githubusercontent.com/boost-ext/sml2/main/sml2
 * No dependencies (Neither Boost nor STL is required)
     * No `virtual` used (-fno-rtti)
     * No `exceptions` required (-fno-exceptions)
