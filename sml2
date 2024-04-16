@@ -504,7 +504,7 @@ struct bool_constant {
 } // SML_TEST
 
 static_assert(([] {
-  constexpr auto expect = [](const bool cond) { bool _[1]{true}; return _[not cond]; };
+  constexpr auto expect = [](bool cond) { if (not cond) { void failed(); failed(); } };
 
   using namespace sml;
   using dsl::operator""_s;

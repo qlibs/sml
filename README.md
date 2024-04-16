@@ -17,9 +17,9 @@
 * Optimized run-time execution
     * https://godbolt.org/z/W9rP94cYK
 * Fast compilation times
-    <p align="center"><img width="65%" src=".github/images/sml2.perf.png" /></p>
+    <p align="center"><img width="65%" src="https://github.com/boost-ext/sml2/blob/gh-pages/images/sml2.perf.png" /></p>
 * Declarative Domain Specific Language (DSL)
-<p align="center"><img src=".github/images/example.png" /></p>
+<p align="center"><img src="https://github.com/boost-ext/sml2/blob/gh-pages/images/example.png" /></p>
 
 ```cpp
 // events
