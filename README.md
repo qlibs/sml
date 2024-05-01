@@ -113,7 +113,7 @@ int main() {
 
 - Can I disable running tests upon use?
 
-    > Yes. Define `SML2_DISABLE_STATIC_ASSERT_TESTS`.  Running compile-time tests upon import/include is essential for correctness, though, so use with cautious.
+    > Yes. Define `DISABLE_STATIC_ASSERT_TESTS`.  Running compile-time tests upon import/include is essential for correctness, though, so use with cautious.
 
 - What features enables the fast compile time times and running tests upon use?
 
@@ -221,7 +221,3 @@ int main() {
 - Is there a Rust version?
 
     > Sort of, experimental, with limited features Rust version of SML can be found here - https://gist.github.com/krzysztof-jusiak/079f80e9d8c472b2c8d515cbf07ad665
-
----
-
-**Disclaimer** `sml2` is not an official Boost library.

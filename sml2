@@ -5,23 +5,12 @@
 // (See accompanying file LICENSE_1_0.txt or copy at
 // http://www.boost.org/LICENSE_1_0.txt)
 //
-#if __cplusplus < 202002L
-#error "SML2 requires C++20 support (Clang-15+, GCC-12+)"
-#else
 #ifndef SML2
-#define SML2 2'0'0
+#define SML2 2'0'0 // SemVer
 #pragma GCC system_header  // -Wnon-template-friend
 
 /**
- * SML2 - UML Declarative Domain Specific Language (DSL)
- * - C++20 single header/module - https://raw.githubusercontent.com/boost-ext/sml2/main/sml2
- * - No dependencies (Neither Boost nor STL is required)
- * - No 'virtual' used (-fno-rtti)
- * - No `exceptions` required (-fno-exceptions)
- * - Library tests itself at compile-time upon include/import
- * - Basically guaranteed no UB, no leaks
- * - Optimized run-time execution - https://godbolt.org/z/j51Tch6PT
- * - Fast compilation times - https://github.com/boost-ext/sml2/blob/main/.github/images/sml2.perf.png
+ * State Machine Library (https://github.com/boost-ext/sml2)
  */
 namespace sml::inline v_2_0_0 {
 namespace meta {
@@ -39,38 +28,20 @@ using make_index_sequence =
 #elif __has_builtin(__integer_pack)
     index_sequence<__integer_pack(N)...>;
 #endif
-static_assert(__is_same(index_sequence<>, make_index_sequence<0>));
-static_assert(__is_same(index_sequence<0>, make_index_sequence<1>));
-static_assert(__is_same(index_sequence<0,1>, make_index_sequence<2>));
 
 template <class... T, template <class...> class TList, class... Ts>
 auto append(TList<Ts...>) -> TList<Ts..., T...>;
-static_assert(__is_same(type_list<int>, decltype(append<int>(type_list{}))));
-static_assert(__is_same(type_list<int, float>, decltype(append<int, float>(type_list{}))));
-static_assert(__is_same(type_list<int, float>, decltype(append<float>(type_list<int>{}))));
-static_assert(__is_same(type_list<float, int>, decltype(append<int>(type_list<float>{}))));
 
 template <class T> auto declval() -> T&&;
 
 template <auto Size>
 struct fixed_string {
   constexpr fixed_string() = default;
-  constexpr explicit(false) fixed_string(const char (&str)[Size]) {
-    for (auto i = 0u; i < Size; ++i) { data[i] = str[i]; }
-  }
-
+  constexpr explicit(false) fixed_string(const char (&str)[Size]) { for (auto i = 0u; i < Size; ++i) { data[i] = str[i]; } }
   static constexpr auto size() { return Size; }
-
   char data[Size]{};
 };
-
 template <auto Size> fixed_string(const char (&)[Size]) -> fixed_string<Size>;
-
-static_assert(sizeof("") == fixed_string("").size());
-static_assert(sizeof("foo") == fixed_string("foo").size());
-static_assert('f' == fixed_string("foo").data[0]);
-static_assert('o' == fixed_string("foo").data[1]);
-static_assert('o' == fixed_string("foo").data[2]);
 }  // namespace meta
 
 namespace back {
@@ -335,13 +306,13 @@ struct transition {
     if constexpr ( requires { R::value; }) {
       if constexpr (R::value) {
         invoke(action, event, self, args...);
-        static_assert(not dst::size, "[E002] on_entry can't have dst state!");
+        static_assert(not dst::size, "[ERROR] on_entry can't have dst state!");
         return true;
       }
     } else {
       if (invoke(guard, event, self, args...)) {
         invoke(action, event, self, args...);
-        static_assert(not dst::size, "[E002] on_entry can't have dst state!");
+        static_assert(not dst::size, "[ERROR] on_entry can't have dst state!");
         return true;
       }
     }
@@ -353,13 +324,13 @@ struct transition {
     if constexpr ( requires { R::value; }) {
       if constexpr (R::value) {
         invoke(action, event, self, args...);
-        static_assert(not dst::size, "[E003] on_exit can't have dst state!");
+        static_assert(not dst::size, "[ERROR] on_exit can't have dst state!");
         return true;
       }
     } else {
       if (invoke(guard, event, self, args...)) {
         invoke(action, event, self, args...);
-        static_assert(not dst::size, "[E003] on_exit can't have dst state!");
+        static_assert(not dst::size, "[ERROR] on_exit can't have dst state!");
         return true;
       }
     }
@@ -408,11 +379,6 @@ template<char... Cs> struct state {
   static constexpr char name[]{Cs..., 0};
   static constexpr auto c_str() { return name; }
 };
-
-static_assert('f' == state<'f', 'o', 'o'>::c_str()[0]);
-static_assert('o' == state<'f', 'o', 'o'>::c_str()[1]);
-static_assert('o' == state<'f', 'o', 'o'>::c_str()[2]);
-static_assert(0 == state<'f', 'o', 'o'>::c_str()[3]);
 
 template <class... TEvents>
 inline constexpr auto event = transition<false, state<>, state<>, meta::type_list<TEvents...>>{};
@@ -469,7 +435,7 @@ struct transition_table final : back::pool<Ts...> {
       : back::pool<Ts...>{static_cast<Ts&&>(ts)...} {}
   static_assert(
       (Ts::initial + ...) >= 1,
-      "[E001] At least one `*state` aka orthogonal region is required!");
+      "[ERROR] At least one `*state` aka orthogonal region is required!");
 };
 template <class... Ts>
 struct dispatch_table final : back::pool<Ts...> {
@@ -493,9 +459,9 @@ constexpr auto process = [](const auto& event) {
   };
 };
 }  // namespace dsl
-}  // namespace sml::inline v_2_0_0
+}  // namespace sml
 
-#if not defined(SML2_DISABLE_STATIC_ASSERT_TESTS)
+#if not defined(DISABLE_STATIC_ASSERT_TESTS)
 namespace SML_TEST {
 template<auto V>
 struct bool_constant {
@@ -514,6 +480,38 @@ static_assert(([] {
   struct e3 {};
   struct e { int value{}; };
   struct unexpected {};
+
+  // meta::index_sequence
+  {
+    static_assert(__is_same(meta::index_sequence<>, meta::make_index_sequence<0>));
+    static_assert(__is_same(meta::index_sequence<0>, meta::make_index_sequence<1>));
+    static_assert(__is_same(meta::index_sequence<0,1>, meta::make_index_sequence<2>));
+  }
+
+  // meta::append
+  {
+    static_assert(__is_same(meta::type_list<int>, decltype(meta::append<int>(meta::type_list{}))));
+    static_assert(__is_same(meta::type_list<int, float>, decltype(meta::append<int, float>(meta::type_list{}))));
+    static_assert(__is_same(meta::type_list<int, float>, decltype(meta::append<float>(meta::type_list<int>{}))));
+    static_assert(__is_same(meta::type_list<float, int>, decltype(meta::append<int>(meta::type_list<float>{}))));
+  }
+
+  // meta::fixed_string
+  {
+    static_assert(sizeof("") == meta::fixed_string("").size());
+    static_assert(sizeof("foo") == meta::fixed_string("foo").size());
+    static_assert('f' == meta::fixed_string("foo").data[0]);
+    static_assert('o' == meta::fixed_string("foo").data[1]);
+    static_assert('o' == meta::fixed_string("foo").data[2]);
+  }
+
+  // front::state
+  {
+    static_assert('f' == front::state<'f', 'o', 'o'>::c_str()[0]);
+    static_assert('o' == front::state<'f', 'o', 'o'>::c_str()[1]);
+    static_assert('o' == front::state<'f', 'o', 'o'>::c_str()[2]);
+    static_assert(0 == front::state<'f', 'o', 'o'>::c_str()[3]);
+  }
 
   // ctor
   {
@@ -982,6 +980,5 @@ static_assert(([] {
     expect(connection.is("Disconnected"_s));
   }
 }(), true));
-#endif // SML2_DISABLE_STATIC_ASSERT_TESTS
+#endif // DISABLE_STATIC_ASSERT_TESTS
 #endif // SML2
-#endif // __cplusplus
