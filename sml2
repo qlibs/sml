@@ -461,7 +461,7 @@ constexpr auto process = [](const auto& event) {
 }  // namespace dsl
 }  // namespace sml
 
-#if not defined(DISABLE_STATIC_ASSERT_TESTS)
+#if not defined(NTEST)
 namespace SML_TEST {
 template<auto V>
 struct bool_constant {
@@ -980,5 +980,5 @@ static_assert(([] {
     expect(connection.is("Disconnected"_s));
   }
 }(), true));
-#endif // DISABLE_STATIC_ASSERT_TESTS
+#endif // NTEST
 #endif // SML2

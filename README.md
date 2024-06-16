@@ -101,7 +101,7 @@ int main() {
 
 - Can I disable running tests at compile-time for faster compilation times?
 
-    > When `DISABLE_STATIC_ASSERT_TESTS` is defined static_asserts tests won't be executed upon inclusion.
+    > When `NTEST` is defined static_asserts tests won't be executed upon inclusion.
     Note: Use with caution as disabling tests means that there are no guarantees upon inclusion that the given compiler/env combination works as expected.
 
 - Is `SML2` SFINAE friendly?
