@@ -10,8 +10,8 @@
 // -->
 [![Boost Licence](http://img.shields.io/badge/license-boost-blue.svg)](http://www.boost.org/LICENSE_1_0.txt)
 [![Version](https://badge.fury.io/gh/qlibs%2Fut.svg)](https://github.com/qlibs/sml/releases)
-[![build](https://img.shields.io/badge/build-blue.svg)](https://godbolt.org/z/eorGK5sEW)
-[![Try it online](https://img.shields.io/badge/try%20it-online-blue.svg)](https://godbolt.org/z/j51Tch6PT)
+[![build](https://img.shields.io/badge/build-blue.svg)](https://godbolt.org/z/Gcfncoo6r)
+[![Try it online](https://img.shields.io/badge/try%20it-online-blue.svg)](https://godbolt.org/z/44YrGeqbx)
 
 ---------------------------------------
 
