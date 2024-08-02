@@ -1,17 +1,172 @@
+// <!--
 //
-// Copyright (c) 2023-2024 Kris Jusiak (kris at jusiak dot net)
+// Copyright (c) 2024 Kris Jusiak (kris at jusiak dot net)
 //
 // Distributed under the Boost Software License, Version 1.0.
 // (See accompanying file LICENSE_1_0.txt or copy at
 // http://www.boost.org/LICENSE_1_0.txt)
 //
-#ifndef SML2
-#define SML2 2'0'0 // SemVer
-#pragma GCC system_header  // -Wnon-template-friend
+#ifdef README
+// -->
+[![Boost Licence](http://img.shields.io/badge/license-boost-blue.svg)](http://www.boost.org/LICENSE_1_0.txt)
+[![Version](https://badge.fury.io/gh/qlibs%2Fut.svg)](https://github.com/qlibs/sml/releases)
+[![build](https://img.shields.io/badge/build-blue.svg)](https://godbolt.org/z/eorGK5sEW)
+[![Try it online](https://img.shields.io/badge/try%20it-online-blue.svg)](https://godbolt.org/z/j51Tch6PT)
 
-/**
- * State Machine Library (https://github.com/boost-ext/sml2)
- */
+---------------------------------------
+
+### SML: UML-2.5 State Machine Language
+
+- Single header (https://raw.githubusercontent.com/qlibs/sml/main/sml)
+    - Easy integration (see [FAQ](#faq))
+- Verifies itself upon include (aka run all tests via static_asserts but it can be disabled - see [FAQ](#faq))
+* Optimized run-time execution and binary size (see [performance](https://godbolt.org/z/W9rP94cYK))
+* Fast compilation times (see [benchmarks](https://github.com/qlibs/sml/blob/gh-pages/images/sml2.perf.png))
+* Declarative Domain Specific Language (see [API](#api))
+
+### Requirements
+
+- C++20 ([Clang-15+, GCC-12+](https://en.cppreference.com/w/cpp/compiler_support))
+
+    - No dependencies (Neither Boost nor STL is required)
+    - No `virtual` used (-fno-rtti)
+    - No `exceptions` required (-fno-exceptions)
+
+---
+
+<p align="center"><img src="https://github.com/qlibs/sml/blob/gh-pages/images/example.png" /></p>
+
+```cpp
+// events
+struct connect {};
+struct ping { bool valid = false; };
+struct established {};
+struct timeout {};
+struct disconnect {};
+
+int main() {
+  // state machine
+  sml::sm connection = [] {
+    // guards
+    auto is_valid  = [](const auto& event) { return event.valid; };
+
+    // actions
+    auto establish = [] { std::puts("establish"); };
+    auto close     = [] { std::puts("close"); };
+    auto setup     = [] { std::puts("setup"); };
+
+    using namespace sml::dsl;
+    /**
+     * src_state + event [ guard ] / action = dst_state
+     */
+    return transition_table{
+      *"Disconnected"_s + event<connect> / establish    = "Connecting"_s,
+       "Connecting"_s   + event<established>            = "Connected"_s,
+       "Connected"_s    + event<ping>[is_valid] / setup,
+       "Connected"_s    + event<timeout> / establish    = "Connecting"_s,
+       "Connected"_s    + event<disconnect> / close     = "Disconnected"_s,
+    };
+  };
+
+  connection.process_event(connect{});
+  connection.process_event(established{});
+  connection.process_event(ping{.valid = true});
+  connection.process_event(disconnect{});
+}
+```
+
+---
+
+### FAQ
+
+- Why would I use a state machine?
+
+    > State machine helps with understanding of the application flow as well as with avoiding spaghetti code.
+      The more booleans/enums/conditions there are the harder is to understand the implicit state of the program.
+      State machines make the state explicit which makes the code easier to follow,change and maintain.
+      Its worth noticing that state machines are not required by any means (there is no silver bullet),
+      switch-case, if-else, co-routines, state pattern, etc. can be used instead. Use your own judgment and
+      experience when choosing a solution based its trade-offs.
+
+- What UML2.5 features are supported and what features will be supported?
+
+    > ATM `SML` supports basic UML features such as transitions, processing events, unexpected events, etc.
+      Please follow tests/examples to stay up to date with available features - https://github.com/qlibs/sml/blob/main/sml#L388
+      There is plan to add more features, potentially up to full UML-2.5 support.
+
+- How does it compare to implementing state machines with co-routines?
+
+   > Its a different approach. Either has its pros and cons. Co-routines are easier to be executed in parallel but they have performance overhead.
+     Co-routines based state machines are written in imperative style whilst SML is using declarative Domain Specific Language (DSL).
+     More information can be found here - https://youtu.be/Zb6xcd2as6o?t=1529
+
+- SML vs UML?
+
+    > `SML` follows UML-2.5 - http://www.omg.org/spec/UML/2.5 - as closeily as possible but it has limited features ATM.
+
+- Can I use `SML` at compile-time?
+
+    > Yes. `SML` is fully compile-time but it can be executed at run-time as well. The run-time is primary use case for `SML`.
+
+- Can I disable running tests at compile-time for faster compilation times?
+
+    > When `NTEST` is defined static_asserts tests wont be executed upon inclusion.
+    Note: Use with caution as disabling tests means that there are no guarantees upon inclusion that the given compiler/env combination works as expected.
+
+- Is `SML` SFINAE friendly?
+
+    > Yes, `SML` is SFINAE (Substitution Failure Is Not An Error) friendly, especially the call to `process_event`.
+
+- How to pass dependencies to guards/actions?
+
+    ```cpp
+    struct foo {
+      bool value{};
+
+      constexpr auto operator()() const {
+        auto guard = [this] { return value; }; // dependency capctured by this
+        return transition_table{
+            *"s1"_s + event<e1>[guard] = "s2"_s,
+        };
+      }
+    };
+
+    sml::sm sm{foo{.value = 42}); // inject value into foo
+    ```
+
+- Is `SML` suitable for embedded systems?
+
+    > Yes, `SML` doesnt have any extenal dependencies, compiles without RTTI and without exceptions.
+      Its also focused on performance, binary size and memory footprint.
+      The following command compiiles without issues:
+      `$CXX -std=c++20 -Ofast -fno-rtti -fno-exceptions -Wall -Wextra -Werror -pedantic -pedantic-errors example.cpp`
+
+- How to integrate with CMake/CPM?
+
+    ```
+    CPMAddPackage(
+      Name sml
+      GITHUB_REPOSITORY qlibs/sml
+      GIT_TAG v2.0.0
+    )
+    add_library(sml INTERFACE)
+    target_include_directories(sml SYSTEM INTERFACE ${sml_SOURCE_DIR})
+    add_library(sml::sml ALIAS sml)
+    ```
+
+    ```
+    target_link_libraries(${PROJECT_NAME} sml::sml);
+    ```
+
+- Is there a Rust version?
+
+    > Rust - `SML` version can be found here - https://gist.github.com/krzysztof-jusiak/079f80e9d8c472b2c8d515cbf07ad665
+<!--
+#else
+#ifndef SML
+#define SML 2'0'0 // SemVer
+#pragma GCC system_header
+
 namespace sml::inline v_2_0_0 {
 namespace meta {
 template <class...>
@@ -435,7 +590,7 @@ struct transition_table final : back::pool<Ts...> {
       : back::pool<Ts...>{static_cast<Ts&&>(ts)...} {}
   static_assert(
       (Ts::initial + ...) >= 1,
-      "[ERROR] At least one `*state` aka orthogonal region is required!");
+      "[ERROR] At least one `*state` (orthogonal region) is required!");
 };
 template <class... Ts>
 struct dispatch_table final : back::pool<Ts...> {
@@ -458,16 +613,16 @@ constexpr auto process = [](const auto& event) {
     self.process_event(event, args...);
   };
 };
-}  // namespace dsl
-}  // namespace sml
+} // dsl
+} // sml
 
-#if not defined(NTEST)
-namespace SML_TEST {
+#ifndef NTEST
+namespace sml::test {
 template<auto V>
 struct bool_constant {
   static constexpr auto value = V;
 };
-} // SML_TEST
+} // sml::test
 
 static_assert(([] {
   constexpr auto expect = [](bool cond) { if (not cond) { void failed(); failed(); } };
@@ -822,7 +977,7 @@ static_assert(([] {
     sm sm = [&] {
       using namespace dsl;
       auto ct_guard = [](const auto& event) {
-        return SML_TEST::bool_constant<requires { event.value; }>{};
+        return sml::test::bool_constant<requires { event.value; }>{};
       };
       auto action = [&](const auto& event) { value += event.value; };
       return transition_table{
@@ -981,4 +1136,5 @@ static_assert(([] {
   }
 }(), true));
 #endif // NTEST
-#endif // SML2
+#endif // SML
+#endif // README
