@@ -21,7 +21,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 //
-#ifdef README
+#if 0
 // -->
 [![MIT Licence](http://img.shields.io/badge/license-MIT-blue.svg)](https://opensource.org/license/mit)
 [![Version](https://badge.fury.io/gh/qlibs%2Fut.svg)](https://github.com/qlibs/sml/releases)
@@ -177,9 +177,9 @@ int main() {
 
     > Rust - `SML` version can be found here - https://gist.github.com/krzysztof-jusiak/079f80e9d8c472b2c8d515cbf07ad665
 <!--
-#else
-#ifndef SML
-#define SML 2'0'0 // SemVer
+#endif
+
+#pragma once
 #pragma GCC system_header
 
 namespace sml::inline v_2_0_0 {
@@ -1151,5 +1151,3 @@ static_assert(([] {
   }
 }(), true));
 #endif // NTEST
-#endif // SML
-#endif // README
