@@ -30,7 +30,11 @@
 
 ---------------------------------------
 
-### SML: UML-2.5 State Machine Language
+## SML: UML-2.5 State Machine Language
+
+> https://en.wikipedia.org/wiki/Finite-state_machine
+
+### Features
 
 - Single header (https://raw.githubusercontent.com/qlibs/sml/main/sml)
     - Easy integration (see [FAQ](#faq))
@@ -212,7 +216,7 @@ struct fixed_string {
   char data[Size]{};
 };
 template <auto Size> fixed_string(const char (&)[Size]) -> fixed_string<Size>;
-}  // namespace meta
+} // meta
 
 namespace back {
 struct on_entry {};
