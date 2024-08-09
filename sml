@@ -23,16 +23,16 @@
 //
 #if 0
 // -->
+[Overview](#Overview) / [Examples](#Examples) / [API](#API) / [FAQ](#FAQ)
+
+## SML: UML-2.5 State Machine Language
+
 [![MIT Licence](http://img.shields.io/badge/license-MIT-blue.svg)](https://opensource.org/license/mit)
 [![Version](https://badge.fury.io/gh/qlibs%2Fut.svg)](https://github.com/qlibs/sml/releases)
 [![build](https://img.shields.io/badge/build-blue.svg)](https://godbolt.org/z/Gcfncoo6r)
 [![Try it online](https://img.shields.io/badge/try%20it-online-blue.svg)](https://godbolt.org/z/44YrGeqbx)
 
----------------------------------------
-
-## SML: UML-2.5 State Machine Language
-
-> https://en.wikipedia.org/wiki/Finite-state_machine
+  > https://en.wikipedia.org/wiki/Finite-state_machine
 
 ### Features
 
@@ -52,6 +52,8 @@
     - No `exceptions` required (-fno-exceptions)
 
 ---
+
+### Overview
 
 <p align="center"><img src="https://github.com/qlibs/sml/blob/gh-pages/images/example.png" /></p>
 
@@ -93,6 +95,14 @@ int main() {
   connection.process_event(disconnect{});
 }
 ```
+
+---
+
+### Examples
+
+--
+
+### API
 
 ---
 
