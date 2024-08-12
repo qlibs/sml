@@ -180,11 +180,11 @@ int main() {
     )
     add_library(sml INTERFACE)
     target_include_directories(sml SYSTEM INTERFACE ${sml_SOURCE_DIR})
-    add_library(sml::sml ALIAS sml)
+    add_library(qlibs::sml ALIAS sml)
     ```
 
     ```
-    target_link_libraries(${PROJECT_NAME} sml::sml);
+    target_link_libraries(${PROJECT_NAME} qlibs::sml);
     ```
 
 - Is there a Rust version?
