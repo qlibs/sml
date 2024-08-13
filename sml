@@ -146,7 +146,7 @@ struct sm {
 ```cpp
 template<class... Ts> struct overload;
 inline constexpr auto if_else; // if_else dispatch policy
-inline constexpr auto jump_table; // jump_table dispatch policy
+inline constexpr auto jmp_table; // jmp_table dispatch policy
 struct X {}; // terminate state
 ```
 
@@ -277,7 +277,7 @@ inline constexpr auto if_else = []<class Fn, template<class...> class T, class..
     }() or ...);
   }(utility::make_index_sequence<sizeof...(Ts)>{});
 };
-inline constexpr auto jump_table = []<class Fn, template<class...> class T, class... Ts>(Fn&& fn, const T<Ts...>& v) {
+inline constexpr auto jmp_table = []<class Fn, template<class...> class T, class... Ts>(Fn&& fn, const T<Ts...>& v) {
   static constexpr bool (*dispatch[])(Fn){[](Fn fn) { return fn(Ts{}); }...};
   return dispatch[v.index](fn);
 };
