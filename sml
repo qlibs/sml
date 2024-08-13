@@ -63,7 +63,7 @@
 // events
 struct connect {};
 struct established {};
-struct ping { bool valid{true}; };
+struct ping { bool valid{}; };
 struct disconnect {};
 struct timeout {};
 
@@ -696,7 +696,7 @@ static_assert(([] {
   {
     struct connect {};
     struct established {};
-    struct ping { bool valid{true}; };
+    struct ping { bool valid{}; };
     struct disconnect {};
     struct timeout {};
 
