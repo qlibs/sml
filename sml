@@ -225,8 +225,8 @@ template<class...> struct unique;
 template<class T, class... Ts, class... Rs>
 struct unique<type_list<T, Ts...>, inherit<Rs...>> :
   type_traits::conditional_t<
-    __is_same(T, void) or
-    __is_same(T, type_traits::none) or
+    type_traits::is_same_v<T, void> or
+    type_traits::is_same_v<T, type_traits::none> or
     __is_base_of(wrapper<T>, inherit<wrapper<Rs>...>),
     unique<type_list<Ts...>, inherit<Rs...>>,
     unique<type_list<Ts...>, inherit<Rs..., T>>
