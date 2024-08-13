@@ -30,7 +30,7 @@
 [![MIT Licence](http://img.shields.io/badge/license-MIT-blue.svg)](https://opensource.org/license/mit)
 [![Version](https://badge.fury.io/gh/qlibs%2Fut.svg)](https://github.com/qlibs/sml/releases)
 [![build](https://img.shields.io/badge/build-blue.svg)](https://godbolt.org/z/Gcfncoo6r)
-[![Try it online](https://img.shields.io/badge/try%20it-online-blue.svg)]()
+[![Try it online](https://img.shields.io/badge/try%20it-online-blue.svg)](https://godbolt.org/z/r8rW4cKrM)
 
   > https://en.wikipedia.org/wiki/Finite-state_machine
 
@@ -53,7 +53,7 @@
 
 ### Overview
 
-> State Machine (https://godbolt.org/z/Yq7q3rhf7)
+> State Machine (https://godbolt.org/z/r8rW4cKrM)
 
 <p align="center"><img src="https://www.planttext.com/api/plantuml/png/RP313e9034Jl_OfwDK7l7Wo9_WKXPc4RQB8KmXQ-twAoIcHlpRoPQJUFwaQTke1rBqArSY-dGHeuQ4iTuSpLw4H1MGFXBJ40YCMnnFIox8ftZfyKygR_ZcZowfPcCLpMHZmZsHPLuDYQQqDzNHRnTYNsrR5HT-XXoIcGusDsWJsMrZPI9FtpxYoet54_xQARsmprQGR8IRpzA3m1" /></p>
 
@@ -86,19 +86,20 @@ int main() {
   };
 
   static_assert(sizeof(connection) == 1u);
-  assert(is<Disconnected>(sm));
+
+  assert(connection.visit_states(is<Disconnected>));
 
   assert(connection.process_event(connect{}));
-  assert(connection.is<Connecting>());
+  assert(connection.visit_states(is<Connecting>));
 
   assert(connection.process_event(established{}));
-  assert(connection.is<Connected>());
+  assert(connection.visit_states(is<Connected>));
 
   assert(connection.process_event(ping{.valid = true}));
-  assert(connection.is<Connected>());
+  assert(connection.visit_states(is<Connected>));
 
   assert(connection.process_event(disconnect{}));
-  assert(connection.is<Disconnected>());
+  assert(connection.visit_states(is<Disconnected>));
 }
 ```
 
@@ -136,7 +137,7 @@ struct sm {
   constexpr auto visit_states(auto&& fn) const;
 };
 
-struct X {}; /// terminate state
+struct X {}; // terminate state
 
 template<class... Ts> overload(Ts...) -> overload<Ts...>;
 ```
@@ -326,7 +327,7 @@ class sm {
     []<class TState, class... TStates>(const mp::type_list<TState, TStates...>&) { return TState{}; }(states{});
 };
 
-struct X {}; /// terminate state
+struct X {}; // terminate state
 
 template<class... Ts> struct overload : Ts... {
   using value_type = mp::type_list<Ts...>;
