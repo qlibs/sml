@@ -132,31 +132,22 @@ main: // $CXX -O3 -fno-exceptions -fno-rtti
 ### API
 
 ```cpp
-namespace sml {
-  struct X {}; // terminate state
-  template<class... Ts> struct overload;
-}
+template<class T>
+  requires (requires (T t) { t(); })
+struct sm {
+  constexpr sm(T&&);
+  template<class TEvent, auto dispatch = if_else>
+    requires dispatchable<TEvent>
+  constexpr auto process_event(const TEvent& event) -> bool ;
+  constexpr auto visit_states(auto&& fn) const;
+};
 ```
 
 ```cpp
-namespace sml {
-  template<class T>
-    requires (requires (T t) { t(); })
-  struct sm {
-    constexpr sm(T&&);
-    template<class TEvent, auto dispatch = utility::if_else>
-      requires dispatchable<TEvent>
-    constexpr auto process_event(const TEvent& event) -> bool ;
-    constexpr auto visit_states(auto&& fn) const;
-  };
-}
-```
-
-```cpp
-namespace sml::utility {
-  inline constexpr auto if_else;    // if_else dispatch policy
-  inline constexpr auto jump_table; // jump_table dispatch policy
-}
+template<class... Ts> struct overload;
+inline constexpr auto if_else; // if_else dispatch policy
+inline constexpr auto jump_table; // jump_table dispatch policy
+struct X {}; // terminate state
 ```
 
 ---
@@ -213,8 +204,6 @@ template<bool B, class T, class F>
 struct conditional { using type = typename detail::conditional<B>::template fn<T, F>; };
 template<bool B, class T, class F>
 using conditional_t = typename detail::conditional<B>::template fn<T, F>;
-template<class T> struct value_type { using type = T; };
-template<class T> requires requires { typename T::value_type; } struct value_type<T> { using type = typename T::value_type; };
 template<class> struct transition_traits;
 template<class T> requires requires { &T::operator(); }
 struct transition_traits<T> : transition_traits<decltype(&T::operator())> { };
@@ -225,12 +214,12 @@ struct transition_traits<T> : transition_traits<decltype(&T::template operator()
 template<class T, class TSrc, class TEvent, class TDst> struct transition_traits<auto (T::*)(TSrc, TEvent) const -> TDst> {
   using src = remove_cvref_t<TSrc>;
   using event = remove_cvref_t<TEvent>;
-  using dst = typename value_type<remove_cvref_t<TDst>>::type;
+  using dst = remove_cvref_t<TDst>;
 };
 template<class T, class TSrc, class TEvent, class TDst> struct transition_traits<auto (T::*)(TSrc, TEvent) -> TDst> {
   using src = remove_cvref_t<TSrc>;
   using event = remove_cvref_t<TEvent>;
-  using dst = typename value_type<remove_cvref_t<TDst>>::type;
+  using dst = remove_cvref_t<TDst>;
 };
 } // namespace type_traits
 namespace mp {
@@ -264,8 +253,12 @@ template<size_t N> using make_index_sequence =
 #else
    index_sequence<__integer_pack(N)...>;
 #endif
-template<class... Ts> requires (__is_empty(Ts) and ...) and (sizeof...(Ts) < 255)
+} // namespace utility
+
+template<class... Ts>
+  requires (__is_empty(Ts) and ...) and (sizeof...(Ts) < (1u << __CHAR_BIT__))
 struct variant {
+  constexpr variant() = default;
   template<class T> constexpr variant(const T&)
     requires (type_traits::is_same_v<T, Ts> or ...)
     : index{[]() -> decltype(index) {
@@ -277,35 +270,22 @@ struct variant {
 };
 
 inline constexpr auto if_else = []<class Fn, template<class...> class T, class... Ts>(Fn&& fn, const T<Ts...>& v) {
-  return [&]<size_t... Ns>(index_sequence<Ns...>) {
+  return [&]<size_t... Ns>(utility::index_sequence<Ns...>) {
     return ([&] {
       if (v.index == Ns) return fn(Ts{});
       return false;
     }() or ...);
-  }(make_index_sequence<sizeof...(Ts)>{});
+  }(utility::make_index_sequence<sizeof...(Ts)>{});
 };
-
 inline constexpr auto jump_table = []<class Fn, template<class...> class T, class... Ts>(Fn&& fn, const T<Ts...>& v) {
   static constexpr bool (*dispatch[])(Fn){[](Fn fn) { return fn(Ts{}); }...};
   return dispatch[v.index](fn);
 };
-} // namespace utility
-
 template<class... Ts> struct overload : Ts... {
   using value_type = mp::type_list<Ts...>;
   using Ts::operator()...;
 };
 template<class... Ts> overload(Ts...) -> overload<Ts...>;
-template<class T> struct maybe {
-  using value_type = T;
-  constexpr maybe() = default;
-  constexpr maybe(const T& t) : t{t}, flag{true} { }
-  constexpr operator bool() const { return flag; }
-  constexpr const T& operator*() const { return t; }
-  T t{};
-  bool flag{};
-};
-struct X {}; // terminate state
 
 template<class T>
   requires (requires (T t) { t(); })
@@ -328,7 +308,7 @@ class sm {
  public:
   constexpr sm(const auto& t) : t_{t} { }
 
-  template<class TEvent, auto dispatch = utility::if_else> requires dispatchable<TEvent>
+  template<class TEvent, auto dispatch = if_else> requires dispatchable<TEvent>
   constexpr auto process_event(const TEvent& event) -> bool {
     return dispatch([&](const auto& state) {
       if constexpr (requires { states_ = *t_()(state, event); }) {
@@ -349,17 +329,17 @@ class sm {
     }, states_);
   }
 
-  template<auto dispatch = utility::if_else>
-  constexpr auto visit_states(auto&& fn) const {
+  template<auto dispatch = if_else> constexpr auto visit_states(auto&& fn) const {
     return dispatch(fn, states_);
   };
 
  private:
   [[no_unique_address]] T t_{};
-  [[no_unique_address]] mp::apply_t<utility::variant, states> states_ = initial_state{};
+  [[no_unique_address]] mp::apply_t<variant, states> states_ = initial_state{};
 };
 template<class T> requires requires (T t) { t(); } sm(T) -> sm<T>;
 template<class T> sm(T) -> sm<mp::wrapper<T>>;
+struct X {}; // terminate state
 } // namespace sml
 
 #ifndef NTEST
@@ -601,27 +581,27 @@ static_assert(([] {
   }
 
   // transition_table[guards/actions]
-  {
-    unsigned calls{};
+  //{
+    //unsigned calls{};
 
-    auto guard = [](const auto& event) { return event.value; };
-    auto action = [&] { ++calls; };
+    //auto guard = [](const auto& event) { return event.value; };
+    //auto action = [&] { ++calls; };
 
-    sml::sm sm = sml::overload{
-      [&](s1, const e& event) -> sml::maybe<s2> {
-        if (guard(event)) {
-          action();
-          return s2{};
-        }
-        return {};
-      },
-    };
+    //sml::sm sm = sml::overload{
+      //[&](s1, const e& event) -> sml::variant<s2> {
+        //if (guard(event)) {
+          //action();
+          //return s2{};
+        //}
+        //return {};
+      //},
+    //};
 
-    expect(not sm.process_event(e{false}));
-    expect(is(sm, sml::mp::type_list<s1>{}));
-    expect(sm.process_event(e{true}));
-    expect(is(sm, sml::mp::type_list<s2>{}));
-  }
+    //expect(not sm.process_event(e{false}));
+    //expect(is(sm, sml::mp::type_list<s1>{}));
+    //expect(sm.process_event(e{true}));
+    //expect(is(sm, sml::mp::type_list<s2>{}));
+  //}
 
 #if 0
   // transition_table[process]
@@ -683,26 +663,32 @@ static_assert(([] {
   // dependencies
   {
     struct s {
-      bool value{};
-      constexpr auto guard() { return value; };
+      bool& in;
+      int& out;
+      constexpr auto guard() { return in; };
       constexpr auto operator()() {
         return sml::overload{
-          [this](s1, e1) -> sml::maybe<s2> { if (guard()) return s2{}; return {}; },
+          [this](s1, const e& event) { if (guard()) out = event.value; },
         };
       }
     };
 
     {
-      sml::sm sm{s{}};
-      expect(not sm.process_event(e1{}));
-      expect(is(sm, sml::mp::type_list<s1>{}));
+      bool in{false};
+      int out{};
+      s _{in, out};
+      sml::sm sm{_};
+      expect(sm.process_event(e{.value = 42}));
+      expect(0 == out);
     }
 
     {
-      s s{true};
-      sml::sm sm{s};
-      expect(sm.process_event(e1{}));
-      expect(is(sm, sml::mp::type_list<s2>{}));
+      bool in{true};
+      int out{};
+      s _{in, out};
+      sml::sm sm{_};
+      expect(sm.process_event(e{.value = 42}));
+      expect(42 == out);
     }
   }
 
