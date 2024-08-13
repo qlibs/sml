@@ -45,9 +45,9 @@
 
 - C++20 ([Clang-15+, GCC-12+](https://en.cppreference.com/w/cpp/compiler_support))
 
-  - No dependencies (no #include/#import)
-  - No `virtual` used (-fno-rtti)
-  - No `exceptions` required (-fno-exceptions)
+  - No dependencies (no `#include/#import`)
+  - No `virtual` used (`-fno-rtti`)
+  - No `exceptions` required (`-fno-exceptions`)
 
 ---
 
@@ -86,7 +86,7 @@ int main() {
   };
 
   static_assert(sizeof(connection) == 1u);
-  assert(connection.is<Disconnected>());
+  assert(is<Disconnected>(sm));
 
   assert(connection.process_event(connect{}));
   assert(connection.is<Connecting>());
@@ -127,6 +127,19 @@ main: // $CXX -O3 -fno-exceptions -fno-rtti
 --
 
 ### API
+
+```cpp
+template<class T>
+struct sm {
+  constexpr sm(T&&);
+  constexpr auto process_event(const auto& event) -> bool;
+  constexpr auto visit_states(auto&& fn) const;
+};
+
+struct X {}; /// terminate state
+
+template<class... Ts> overload(Ts...) -> overload<Ts...>;
+```
 
 ---
 
@@ -240,8 +253,6 @@ template<class Fn, class... Ts>
 }
 } // namespace utility
 
-struct X {}; /// terminate state
-
 template<class T>
 class sm {
   template<class R> struct value_type {
@@ -305,15 +316,17 @@ class sm {
     }, states_);
   }
 
-  template<class... TStates> [[nodiscard]] constexpr auto is() const -> bool {
-    return utility::visit([&]<class TState>(const TState&) { return (type_traits::is_same_v<TStates, TState> and ...); }, states_);
-  }
+  constexpr auto visit_states(auto&& fn) const {
+    return utility::visit(fn, states_);
+  };
 
  private:
   [[no_unique_address]] T t_{};
   [[no_unique_address]] mp::apply_t<utility::variant, states> states_ =
     []<class TState, class... TStates>(const mp::type_list<TState, TStates...>&) { return TState{}; }(states{});
 };
+
+struct X {}; /// terminate state
 
 template<class... Ts> struct overload : Ts... {
   using value_type = mp::type_list<Ts...>;
@@ -335,15 +348,18 @@ template<class T> struct maybe {
 #ifndef NTEST
 static_assert(([] {
   constexpr auto expect = [](bool cond) { if (not cond) { void failed(); failed(); } };
+  constexpr auto is = []<class... TStates>(const auto& sm, sml::mp::type_list<TStates...>) {
+    return sm.visit_states([&]<class TState>(const TState&) { return (sml::type_traits::is_same_v<TStates, TState> and ...); });
+  };
 
-  /// states
+  // states
   struct idle {};
   struct s1 {};
   struct s2 {};
   struct s3 {};
   struct s4 {};
 
-  /// events
+  // events
   struct e1 {};
   struct e2 {};
   struct e3 {};
@@ -370,7 +386,7 @@ static_assert(([] {
     };
 
     expect(sm.process_event(e1{}));
-    expect(sm.is<s2>());
+    expect(is(sm, sml::mp::type_list<s2>{}));
   }
 
 #if 0
@@ -386,7 +402,7 @@ static_assert(([] {
       };
     };
 
-    expect(sm.is<idle>());
+    expect(is(sm, sml::mp::type_list<idle>{}));
     expect(on_entry_calls == 1);
   }
 
@@ -408,13 +424,13 @@ static_assert(([] {
     };
 
     expect(sm.process_event(e1{}));
-    expect(sm.is<s2>());
+    expect(is(sm, sml::mp::type_list<s2>{}));
     expect(on_entry_calls == 1);
     expect(on_exit_calls == 0);
     expect(sm.process_event(e2{}));
     expect(on_entry_calls == 1);
     expect(on_exit_calls == 1);
-    expect(sm.is<s3>());
+    expect(is(sm, sml::mp::type_list<s3>{}));
   }
 
   // process_event[on_entry/on_exit] with internal transitions
@@ -435,13 +451,13 @@ static_assert(([] {
     };
 
     expect(sm.process_event(e1{}));
-    expect(sm.is<s2>());
+    expect(is(sm, sml::mp::type_list<s2>{}));
     expect(on_entry_calls == 1);
     expect(on_exit_calls == 0);
     expect(sm.process_event(e2{}));
     expect(on_entry_calls == 1);
     expect(on_exit_calls == 0);
-    expect(sm.is<s2>());
+    expect(is(sm, sml::mp::type_list<s2>{}));
   }
 #endif
 
@@ -453,9 +469,9 @@ static_assert(([] {
     };
 
     expect(sm.process_event(e1{}));
-    expect(sm.is<s2>());
+    expect(is(sm, sml::mp::type_list<s2>{}));
     expect(sm.process_event(e1{}));
-    expect(sm.is<s3>());
+    expect(is(sm, sml::mp::type_list<s3>{}));
   }
 
   // process_event[different events in any state]
@@ -468,21 +484,21 @@ static_assert(([] {
     };
 
     expect(sm.process_event(e1{}));
-    expect(sm.is<s2>());
+    expect(is(sm, sml::mp::type_list<s2>{}));
 
     expect(sm.process_event(e{{}}));
-    expect(sm.is<s1>());
+    expect(is(sm, sml::mp::type_list<s1>{}));
     expect(not sm.process_event(e2{}));  // ignored
-    expect(sm.is<s1>());
+    expect(is(sm, sml::mp::type_list<s1>{}));
 
     expect(sm.process_event(e1{}));  // s1 -> s2
-    expect(sm.is<s2>());
+    expect(is(sm, sml::mp::type_list<s2>{}));
 
     expect(sm.process_event(e2{}));  // s2 -> s3
-    expect(sm.is<s3>());
+    expect(is(sm, sml::mp::type_list<s3>{}));
 
     expect(sm.process_event(e{}));  // _ -> s1
-    expect(sm.is<s1>());
+    expect(is(sm, sml::mp::type_list<s1>{}));
   }
 
   // proces_event[unexpected event]
@@ -507,16 +523,16 @@ static_assert(([] {
 
     {
       sml::sm sm{test};
-      expect(sm.is<s1>());
+      expect(is(sm, sml::mp::type_list<s1>{}));
       expect(sm.process_event(e1{}));
-      expect(sm.is<s2>());
+      expect(is(sm, sml::mp::type_list<s2>{}));
     }
 
     {
       sml::sm sm{test};
-      expect(sm.is<s1>());
+      expect(is(sm, sml::mp::type_list<s1>{}));
       expect(sm.process_event(e2{}));
-      expect(sm.is<s2>());
+      expect(is(sm, sml::mp::type_list<s2>{}));
     }
   }
 
@@ -528,13 +544,13 @@ static_assert(([] {
       [](s2, e1) -> idle { return {}; },
     };
 
-    expect(sm.is<idle>());
+    expect(is(sm, sml::mp::type_list<idle>{}));
     expect(sm.process_event(e1{}));
-    expect(sm.is<s1>());
+    expect(is(sm, sml::mp::type_list<s1>{}));
     expect(sm.process_event(e1{}));
-    expect(sm.is<s2>());
+    expect(is(sm, sml::mp::type_list<s2>{}));
     expect(sm.process_event(e1{}));
-    expect(sm.is<idle>());
+    expect(is(sm, sml::mp::type_list<idle>{}));
   }
 
   // transition_table[multiple transitions]
@@ -544,13 +560,13 @@ static_assert(([] {
       [](s2, e2) -> s1 { return {}; },
     };
 
-    expect(sm.is<s1>());
+    expect(is(sm, sml::mp::type_list<s1>{}));
     expect(sm.process_event(e1{}));
-    expect(sm.is<s2>());
+    expect(is(sm, sml::mp::type_list<s2>{}));
     expect(not sm.process_event(e1{}));
-    expect(sm.is<s2>());
+    expect(is(sm, sml::mp::type_list<s2>{}));
     expect(sm.process_event(e2{}));
-    expect(sm.is<s1>());
+    expect(is(sm, sml::mp::type_list<s1>{}));
   }
 
   // transition_table[terminated state]
@@ -559,9 +575,9 @@ static_assert(([] {
       [](s1, e1) -> sml::X { return {}; },
     };
 
-    expect(sm.is<s1>());
+    expect(is(sm, sml::mp::type_list<s1>{}));
     expect(sm.process_event(e1{}));
-    expect(sm.is<sml::X>());
+    expect(is(sm, sml::mp::type_list<sml::X>{}));
     expect(not sm.process_event(e1{}));
   }
 
@@ -583,9 +599,9 @@ static_assert(([] {
     };
 
     expect(not sm.process_event(e{false}));
-    expect(sm.is<s1>());
+    expect(is(sm, sml::mp::type_list<s1>{}));
     expect(sm.process_event(e{true}));
-    expect(sm.is<s2>());
+    expect(is(sm, sml::mp::type_list<s2>{}));
   }
 
 #if 0
@@ -600,7 +616,7 @@ static_assert(([] {
     };
 
     expect(sm.process_event(e1{}));
-    expect(sm.is<s3>());
+    expect(is(sm, sml::mp::type_list<s3>{}));
   }
 
   // transition_table[orthogonal regions]
@@ -614,11 +630,11 @@ static_assert(([] {
       }
     };
 
-    expect(sm.is<s1, s3>());
+    expect(is(sm, sml::mp::type_list<s1, s3>{}));
     expect(sm.process_event(e1{}));
-    expect(sm.is<s2, s3>());
+    expect(is(sm, sml::mp::type_list<s2, s3>{}));
     expect(sm.process_event(e2{}));
-    expect(sm.is<s2, s4>());
+    expect(is(sm, sml::mp::type_list<s2, s4>{}));
   }
 
   // transition_table[orthogonal regions]
@@ -635,13 +651,13 @@ static_assert(([] {
       }
     };
 
-    expect(sm.is<s1, s3>());
+    expect(is(sm, sml::mp::type_list<s1, s3>{}));
     expect(sm.process_event(e1{}));
-    expect(sm.is<s2, s3>());
+    expect(is(sm, sml::mp::type_list<s2, s3>{}));
     expect(sm.process_event(e2{}));
-    expect(sm.is<X, s3>());
+    expect(is(sm, sml::mp::type_list<X, s3>{}));
     expect(sm.process_event(e3{}));
-    expect(sm.is<X, X>());
+    expect(is(sm, sml::mp::type_list<X, X>{}));
   }
 #endif
 
@@ -660,14 +676,14 @@ static_assert(([] {
     {
       sml::sm sm{s{}};
       expect(not sm.process_event(e1{}));
-      expect(sm.is<s1>());
+      expect(is(sm, sml::mp::type_list<s1>{}));
     }
 
     {
       s s{true};
       sml::sm sm{s};
       expect(sm.process_event(e1{}));
-      expect(sm.is<s2>());
+      expect(is(sm, sml::mp::type_list<s2>{}));
     }
   }
 
@@ -707,15 +723,15 @@ static_assert(([] {
 
       struct empty{};
       static_assert(sizeof(connection) == sizeof(empty));
-      expect(connection.is<sm::Disconnected>());
+      expect(is(connection, sml::mp::type_list<sm::Disconnected>{}));
       expect(connection.process_event(connect{}));
-      expect(connection.is<sm::Connecting>());
+      expect(is(connection, sml::mp::type_list<sm::Connecting>{}));
       expect(connection.process_event(established{}));
-      expect(connection.is<sm::Connected>());
+      expect(is(connection, sml::mp::type_list<sm::Connected>{}));
       expect(connection.process_event(ping{.valid = true}));
-      expect(connection.is<sm::Connected>());
+      expect(is(connection, sml::mp::type_list<sm::Connected>{}));
       expect(connection.process_event(disconnect{}));
-      expect(connection.is<sm::Disconnected>());
+      expect(is(connection, sml::mp::type_list<sm::Disconnected>{}));
     }
 
     #if __cpp_constexpr >= 202211L
@@ -746,15 +762,15 @@ static_assert(([] {
 
       struct empty{};
       static_assert(sizeof(connection) == sizeof(empty));
-      expect(connection.is<sm::Disconnected>());
+      expect(is(connection, sml::mp::type_list<sm::Disconnected>{}));
       expect(connection.process_event(connect{}));
-      expect(connection.is<sm::Connecting>());
+      expect(is(connection, sml::mp::type_list<sm::Connecting>{}));
       expect(connection.process_event(established{}));
-      expect(connection.is<sm::Connected>());
+      expect(is(connection, sml::mp::type_list<sm::Connected>{}));
       expect(connection.process_event(ping{.valid = true}));
-      expect(connection.is<sm::Connected>());
+      expect(is(connection, sml::mp::type_list<sm::Connected>{}));
       expect(connection.process_event(disconnect{}));
-      expect(connection.is<sm::Disconnected>());
+      expect(is(connection, sml::mp::type_list<sm::Disconnected>{}));
     }
 
     {
@@ -776,15 +792,15 @@ static_assert(([] {
 
       struct empty{};
       static_assert(sizeof(connection) == sizeof(empty));
-      expect(connection.is<Disconnected>());
+      expect(is(connection, sml::mp::type_list<Disconnected>{}));
       expect(connection.process_event(connect{}));
-      expect(connection.is<Connecting>());
+      expect(is(connection, sml::mp::type_list<Connecting>{}));
       expect(connection.process_event(established{}));
-      expect(connection.is<Connected>());
+      expect(is(connection, sml::mp::type_list<Connected>{}));
       expect(connection.process_event(ping{.valid = true}));
-      expect(connection.is<Connected>());
+      expect(is(connection, sml::mp::type_list<Connected>{}));
       expect(connection.process_event(disconnect{}));
-      expect(connection.is<Disconnected>());
+      expect(is(connection, sml::mp::type_list<Disconnected>{}));
     }
     #endif
   }
