@@ -82,7 +82,7 @@ int main() {
     [](Disconnected, connect)     -> Connecting   { establish(); },
     [](Connecting,   established) -> Connected    { },
     [](Connected,    ping event)                  { if (event.valid) { reset(); } },
-    [](Connected,    timeout)     -> Connecting   { establish(); ,
+    [](Connected,    timeout)     -> Connecting   { establish(); },
     [](Connected,    disconnect)  -> Disconnected { close(); },
   };
 
