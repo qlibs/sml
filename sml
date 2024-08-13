@@ -130,16 +130,17 @@ main: // $CXX -O3 -fno-exceptions -fno-rtti
 ### API
 
 ```cpp
+struct X {}; // terminate state
+template<class... Ts> struct overload;
+```
+
+```cpp
 template<class T>
 struct sm {
   constexpr sm(T&&);
   constexpr auto process_event(const auto& event) -> bool;
   constexpr auto visit_states(auto&& fn) const;
 };
-
-struct X {}; // terminate state
-
-template<class... Ts> overload(Ts...) -> overload<Ts...>;
 ```
 
 ---
