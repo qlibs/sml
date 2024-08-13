@@ -48,48 +48,73 @@
   - No dependencies (Neither `Boost` nor `STL` is required)
   - No `virtual` used (-fno-rtti)
   - No `exceptions` required (-fno-exceptions)
-  - `static_assert(1u == sizeof(sm));`
+  - `static_assert(1u == sizeof(State Machine))`
 
 ---
 
 ### Overview
 
-<p align="center"><img src="https://www.planttext.com/api/plantuml/png/VP112uCm38Nl-HKv3zpkEmnX-nSYucnmWPgAZVlzYsuM2yFUqlU-zzAMKTj9vy5Z5qIeKmvo7gK7PVM4ztG9W5YTQaodA6xuuFZ3o9c-7rTzmwLVYElMWHSawtrwZY_3CjSEiv0lbinhIwR-iuzBKeKSctVhsM5jVHD5qaPve33hGKXQzS2QFTEiBiq09OcptuGF" /></p>
+<p align="center"><img width="100%" src="https://www.planttext.com/api/plantuml/png/VP312eD034Jl-OhqMh2zzr24zYz4ojOD6bYZkD7lRxHrKP3kBSoRcMJpg6xGiGrOTI9KANTowQM6apRK4lR1iO2o1i978W0GYtE9wMNP7PySVndaJT-EYxxQfPuTjxKGhqYsn3jmRCosepOs2_dQ4hoqxDGZl9-J2kJucbnWZwNr3HH9_vZJYiejTUCXkZlFK9zcW9p4svV21m00" /></p>
+
+> State Machine (https://godbolt.org/z/Yq7q3rhf7)
 
 ```cpp
-// states
-struct Disconnected {};
-struct Connecting {};
-struct Connected {};
+struct connect {};
+struct established {};
+struct ping { bool valid{true}; };
+struct disconnect {};
+struct timeout {};
 
-// guards/actions
-auto establish = []{ };
-auto close = []{ };
-auto reset_timeout = []{ };
+int main() {
+  auto establish = [] { std::puts("establish"); };
+  auto close     = [] { std::puts("close"); };
+  auto reset     = [] { std::puts("reset"); };
 
-// transitions
-sml::sm connection = sml::overload{
-  [](Disconnected, connect)            -> Connecting   { establish(); return {}; },
-  [](Connecting,   established)        -> Connected    { return {}; },
-  [](Connected,    const ping& event)                  { if (event.valid) { reset_timeout(); } },
-  [](Connected,    timeout)            -> Connecting   { establish(); return {}; },
-  [](Connected,    disconnect)         -> Disconnected { close(); return {}; },
-};
+  struct Disconnected {};
+  struct Connecting {};
+  struct Connected {};
 
-static_assert(sizeof(connection) == 1u);
-expect(connection.is<Disconnected>());
+  sml::sm connection = sml::overload{
+    [](Disconnected, connect)     -> Connecting   { establish(); return {}; },
+    [](Connecting,   established) -> Connected    { return {}; },
+    [](Connected,    ping event)                  { if (event.valid) { reset(); } },
+    [](Connected,    timeout)     -> Connecting   { establish(); return {}; },
+    [](auto,         auto)        -> Disconnected { close(); return {}; },
+  };
 
-expect(connection.process_event(connect{}));
-expect(connection.is<Connecting>());
+  static_assert(sizeof(connection) == 1u);
+  assert(connection.is<Disconnected>());
 
-expect(connection.process_event(established{}));
-expect(connection.is<Connected>());
+  assert(connection.process_event(connect{}));
+  assert(connection.is<Connecting>());
 
-expect(connection.process_event(ping{.valid = true}));
-expect(connection.is<Connected>());
+  assert(connection.process_event(established{}));
+  assert(connection.is<Connected>());
 
-expect(connection.process_event(disconnect{}));
-expect(connection.is<Disconnected>());
+  assert(connection.process_event(ping{.valid = true}));
+  assert(connection.is<Connected>());
+
+  assert(connection.process_event(disconnect{}));
+  assert(connection.is<Disconnected>());
+}
+```
+
+```cpp
+main: // $CXX -O3 -fno-exceptions -fno-rtti
+  push    rax
+  lea     rdi, [rip + .L.str.8]
+  call    puts@PLT
+  lea     rdi, [rip + .L.str.9]
+  call    puts@PLT
+  lea     rdi, [rip + .L.str.10]
+  call    puts@PLT
+  xor     eax, eax
+  pop     rcx
+  ret
+
+.L.str.8:  .asciz  "establish"
+.L.str.9:  .asciz  "reset"
+.L.str.10: .asciz  "close"
 ```
 
 ---
