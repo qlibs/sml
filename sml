@@ -219,7 +219,7 @@ template<class T, class TSrc, class TEvent, class TDst> struct transition_traits
 namespace mp {
 template<class...> struct type_list {};
 template<class... Ts> struct inherit : Ts... {};
-template<class> struct wrapper {};
+template<class T> struct wrapper { T t; constexpr auto operator()() const { return t; } };
 template<class...> struct unique;
 template<class T, class... Ts, class... Rs>
 struct unique<type_list<T, Ts...>, inherit<Rs...>> :
@@ -253,26 +253,35 @@ struct variant {
 
 template<class Fn, class... Ts>
 [[nodiscard]] constexpr auto visit(Fn fn, const variant<Ts...>& v) {
-  bool (*dispatch[])(Fn){[](Fn fn) { return fn(Ts{}); }...};
+  constexpr bool (*dispatch[])(Fn){[](Fn fn) { return fn(Ts{}); }...};
   return dispatch[v.index](fn);
 }
 } // namespace utility
 
-template<class T>
-class sm {
-  template<class R> struct value_type {
-    using type = typename R::value_type;
-  };
-  template<class R> requires requires(R t) { t(); }
-  struct value_type<R> {
-    using type = typename type_traits::remove_cvref_t<decltype(utility::declval<R>()())>::value_type;
-  };
+template<class... Ts> struct overload : Ts... {
+  using value_type = mp::type_list<Ts...>;
+  using Ts::operator()...;
+};
+template<class... Ts> overload(Ts...) -> overload<Ts...>;
+template<class T> struct maybe {
+  using value_type = T;
+  constexpr maybe() = default;
+  constexpr maybe(const T& t) : t{t}, flag{true} { }
+  constexpr operator bool() const { return flag; }
+  constexpr const T& operator*() const { return t; }
+  T t{};
+  bool flag{};
+};
+struct X {}; // terminate state
 
+template<class T>
+  requires (requires (T t) { t(); })
+class sm {
   template<class... Ts> static auto unique_states(mp::type_list<Ts...>) ->
     mp::unique_t<typename type_traits::transition_traits<Ts>::src...,
                  typename type_traits::transition_traits<Ts>::dst...>;
 
-  using states = decltype(unique_states(typename value_type<T>::type{}));
+  using states = decltype(unique_states(typename decltype(utility::declval<T>()())::value_type{}));
   using initial_state = decltype( // first state
     []<class TState, class... TStates>(mp::type_list<TState, TStates...>) { return TState{}; }(states{})
   );
@@ -280,39 +289,26 @@ class sm {
   template<class TEvent>
   static constexpr auto dispatchable =
     []<class... TStates>(mp::type_list<TStates...>) {
-      return (requires { utility::declval<T>()(utility::declval<TStates&>(), utility::declval<TEvent>()); } or ...) or
-             (requires { utility::declval<T>()()(utility::declval<TStates&>(), utility::declval<TEvent>()); } or ...);
+      return (requires { utility::declval<T>()()(utility::declval<TStates&>(), utility::declval<TEvent>()); } or ...);
     }(states{});
 
  public:
-  constexpr sm(const T& t) : t_{t} { }
+  constexpr sm(const auto& t) : t_{t} { }
 
   template<class TEvent> requires dispatchable<TEvent>
   constexpr auto process_event(const TEvent& event) -> bool {
     return utility::visit([&](const auto& state) {
       if constexpr (requires { states_ = *t_()(state, event); }) {
-        if (auto r = t_()(state, event); r) {
-          states_ = *r;
+        if (auto state_ = t_()(state, event); state_) {
+          states_ = *state_;
           return true;
         }
         return false;
       } else if constexpr (requires { states_ = t_()(state, event); }) {
         states_ = t_()(state, event);
         return true;
-      } else  if constexpr (requires { t_()(state, event); }) {
+      } else if constexpr (requires { t_()(state, event); }) {
         t_()(state, event);
-        return true;
-      } else if constexpr (requires { states_ = t_(state, event); }) {
-        states_ = t_(state, event);
-        return true;
-      } else if constexpr (requires { states_ = *t_(state, event); }) {
-        if (auto r = t_(state, event); r) {
-          states_ = *r;
-          return true;
-        }
-        return false;
-      } else  if constexpr (requires { t_(state, event); }) {
-        t_(state, event);
         return true;
       } else {
         return false;
@@ -328,31 +324,17 @@ class sm {
   [[no_unique_address]] T t_{};
   [[no_unique_address]] mp::apply_t<utility::variant, states> states_ = initial_state{};
 };
-
-struct X {}; // terminate state
-
-template<class... Ts> struct overload : Ts... {
-  using value_type = mp::type_list<Ts...>;
-  using Ts::operator()...;
-};
-template<class... Ts> overload(Ts...) -> overload<Ts...>;
-
-template<class T> struct maybe {
-  using value_type = T;
-  constexpr maybe() = default;
-  constexpr maybe(const T& t) : t{t}, flag{true} { }
-  constexpr operator bool() const { return flag; }
-  constexpr const T& operator*() const { return t; }
-  T t{};
-  bool flag{};
-};
+template<class T> requires requires (T t) { t(); } sm(T) -> sm<T>;
+template<class T> sm(T) -> sm<mp::wrapper<T>>;
 } // namespace sml
 
 #ifndef NTEST
 static_assert(([] {
   constexpr auto expect = [](bool cond) { if (not cond) { void failed(); failed(); } };
   constexpr auto is = []<class... TStates>(const auto& sm, sml::mp::type_list<TStates...>) {
-    return sm.visit_states([&]<class TState>(const TState&) { return (sml::type_traits::is_same_v<TStates, TState> and ...); });
+    return sm.visit_states([&]<class TState>(const TState&) {
+      return (sml::type_traits::is_same_v<TStates, TState> and ...);
+    });
   };
 
   // states
