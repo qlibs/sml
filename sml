@@ -138,7 +138,9 @@ namespace sml {
 
 ```cpp
 namespace sml {
-  template<class T> struct sm {
+  template<class T>
+    requires (requires (T t) { t(); })
+  struct sm {
     constexpr sm(T&&);
     template<class TEvent, auto dispatch = utility::if_else>
       requires dispatchable<TEvent>
