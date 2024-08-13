@@ -700,17 +700,14 @@ static_assert(([] {
 
     {
       struct sm {
-        /// states
         struct Disconnected {};
         struct Connecting {};
         struct Connected {};
 
-        /// guards/actions
         constexpr void establish(){}
         constexpr void close(){}
         constexpr void reset_timeout(){ }
 
-        /// transitions
         constexpr auto operator()() {
           return sml::overload{
             [this](Disconnected, connect)            -> Connecting   { establish(); return {}; },
@@ -740,7 +737,6 @@ static_assert(([] {
     #if __cpp_constexpr >= 202211L
     {
       struct sm {
-        /// states
         struct Disconnected {};
         struct Connecting {};
         struct Connected {};
@@ -749,7 +745,6 @@ static_assert(([] {
         static constexpr void close(){}
         static constexpr void reset_timeout(){ }
 
-        /// transitions
         constexpr auto operator()() const {
           return sml::overload{
             [](Disconnected, connect)            -> Connecting   { establish(); return {}; },
