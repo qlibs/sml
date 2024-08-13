@@ -1,4 +1,3 @@
-#include <utility>
 // <!--
 // The MIT License (MIT)
 //
@@ -174,10 +173,11 @@ template<class T> struct sm {
 #pragma once
 
 namespace sml::inline v3_0_0 {
+using size_t = decltype(sizeof(int));
 namespace type_traits {
 struct none {};
-template<class...> inline constexpr auto is_same_v = false;
-template<class T> inline constexpr auto is_same_v<T, T> = true;
+template<class...> inline constexpr bool is_same_v = false;
+template<class T> inline constexpr bool is_same_v<T, T> = true;
 template<class T> struct remove_reference { using type = T; };
 template<class T> struct remove_reference<T&> { using type = T; };
 template<class T> struct remove_reference<T&&> { using type = T; };
@@ -240,6 +240,14 @@ template<template <class...> class TList, class T> using apply_t = typename appl
 } // namespace mp
 namespace utility {
 template<class T> auto declval() -> T&&;
+template<class T, T...> struct integer_sequence { };
+template<size_t... Ns> using index_sequence = integer_sequence<size_t, Ns...>;
+template<size_t N> using make_index_sequence =
+#if defined(__clang__) || defined(_MSC_VER)
+  __make_integer_seq<integer_sequence, size_t, N>;
+#else
+   index_sequence<__integer_pack(N)...>;
+#endif
 template<class... Ts> requires (__is_empty(Ts) and ...) and (sizeof...(Ts) < 255)
 struct variant {
   template<class T> constexpr variant(const T&)
@@ -253,12 +261,12 @@ struct variant {
 };
 
 inline constexpr auto if_else = []<class Fn, template<class...> class T, class... Ts>(Fn&& fn, const T<Ts...>& v) {
-  return [&]<auto... Ns>(std::index_sequence<Ns...>) {
+  return [&]<size_t... Ns>(index_sequence<Ns...>) {
     return ([&] {
       if (v.index == Ns) return fn(Ts{});
       return false;
     }() or ...);
-  }(std::make_index_sequence<sizeof...(Ts)>{});
+  }(make_index_sequence<sizeof...(Ts)>{});
 };
 
 inline constexpr auto jump_table = []<class Fn, template<class...> class T, class... Ts>(Fn&& fn, const T<Ts...>& v) {
