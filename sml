@@ -145,6 +145,10 @@ main: // $CXX -O3 -fno-exceptions -fno-rtti
     ```
     target_link_libraries(${PROJECT_NAME} qlibs::sml);
     ```
+
+- Acknowledgments
+
+  > https://www.youtube.com/watch?v=Zb6xcd2as6o
 <!--
 #endif
 
