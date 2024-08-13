@@ -33,6 +33,7 @@
 [![Try it online](https://img.shields.io/badge/try%20it-online-blue.svg)](https://godbolt.org/z/r8rW4cKrM)
 
   > https://en.wikipedia.org/wiki/Finite-state_machine
+
   > https://www.omg.org/spec/UML/2.5.1
 
 ### Features
