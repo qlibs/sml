@@ -59,6 +59,7 @@
 <p align="center"><img src="https://www.planttext.com/api/plantuml/png/RP313e9034Jl_OfwDK7l7Wo9_WKXPc4RQB8KmXQ-twAoIcHlpRoPQJUFwaQTke1rBqArSY-dGHeuQ4iTuSpLw4H1MGFXBJ40YCMnnFIox8ftZfyKygR_ZcZowfPcCLpMHZmZsHPLuDYQQqDzNHRnTYNsrR5HT-XXoIcGusDsWJsMrZPI9FtpxYoet54_xQARsmprQGR8IRpzA3m1" /></p>
 
 ```cpp
+// events
 struct connect {};
 struct established {};
 struct ping { bool valid{true}; };
@@ -66,14 +67,17 @@ struct disconnect {};
 struct timeout {};
 
 int main() {
+  // guards/actions
   auto establish = [] { std::puts("establish"); };
   auto close     = [] { std::puts("close"); };
   auto reset     = [] { std::puts("reset"); };
 
+  // states
   struct Disconnected {};
   struct Connecting {};
   struct Connected {};
 
+  // transitions
   sml::sm connection = sml::overload{
     [](Disconnected, connect)     -> Connecting   { establish(); return {}; },
     [](Connecting,   established) -> Connected    { return {}; },
