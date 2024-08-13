@@ -219,7 +219,7 @@ template<class T, class TSrc, class TEvent, class TDst> struct transition_traits
 namespace mp {
 template<class...> struct type_list {};
 template<class... Ts> struct inherit : Ts... {};
-template<class T> struct wrapper { T t; constexpr auto operator()() const { return t; } };
+template<class T> struct wrapper { [[no_unique_address]] T t; constexpr auto operator()() const { return t; } };
 template<class...> struct unique;
 template<class T, class... Ts, class... Rs>
 struct unique<type_list<T, Ts...>, inherit<Rs...>> :
