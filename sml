@@ -135,10 +135,10 @@ template<class... Ts> struct overload;
 ```
 
 ```cpp
-template<class T>
-struct sm {
+template<class T> struct sm {
   constexpr sm(T&&);
-  constexpr auto process_event(const auto& event) -> bool;
+  template<class TEvent> requires dispatchable<TEvent>
+  constexpr auto process_event(const TEvent& event) -> bool ;
   constexpr auto visit_states(auto&& fn) const;
 };
 ```
@@ -224,7 +224,9 @@ template<class...> struct unique;
 template<class T, class... Ts, class... Rs>
 struct unique<type_list<T, Ts...>, inherit<Rs...>> :
   type_traits::conditional_t<
-    __is_same(T, void) or __is_same(T, type_traits::none) or __is_base_of(wrapper<T>, inherit<wrapper<Rs>...>),
+    __is_same(T, void) or
+    __is_same(T, type_traits::none) or
+    __is_base_of(wrapper<T>, inherit<wrapper<Rs>...>),
     unique<type_list<Ts...>, inherit<Rs...>>,
     unique<type_list<Ts...>, inherit<Rs..., T>>
   > { };
@@ -239,7 +241,8 @@ namespace utility {
 template<class T> auto declval() -> T&&;
 template<class... Ts> requires (__is_empty(Ts) and ...)
 struct variant {
-  template<class T> constexpr variant(const T&) requires (type_traits::is_same_v<T, Ts> or ...)
+  template<class T> constexpr variant(const T&)
+    requires (type_traits::is_same_v<T, Ts> or ...)
     : index{[]() -> decltype(index) {
         bool match[]{type_traits::is_same_v<Ts, T>...};
         for (auto i = 0u; i < sizeof...(Ts); ++i) if (match[i]) return i;
@@ -266,26 +269,25 @@ class sm {
   };
 
   template<class... Ts> static auto unique_states(mp::type_list<Ts...>) ->
-    mp::unique_t<typename type_traits::transition_traits<Ts>::src..., typename type_traits::transition_traits<Ts>::dst...>;
+    mp::unique_t<typename type_traits::transition_traits<Ts>::src...,
+                 typename type_traits::transition_traits<Ts>::dst...>;
 
-  template<class... Ts> static auto all_events(mp::type_list<Ts...>) ->
-    mp::type_list<typename type_traits::transition_traits<Ts>::event...>;
-
-  template<class... Ts> static auto unique_events(mp::type_list<Ts...>) ->
-    mp::unique_t<typename type_traits::transition_traits<Ts>::event...>;
-
- public:
   using states = decltype(unique_states(typename value_type<T>::type{}));
-  using events = decltype(unique_events(typename value_type<T>::type{}));
+  using initial_state = decltype( // first state
+    []<class TState, class... TStates>(mp::type_list<TState, TStates...>) { return TState{}; }(states{})
+  );
 
   template<class TEvent>
-  static constexpr bool has_event = []<class... TEvents, class... Ts>(mp::type_list<TEvents...>, mp::type_list<Ts...>) {
-    return (type_traits::is_same_v<Ts, type_traits::none> or ...) ? true : (type_traits::is_same_v<TEvents, TEvent> or ...);
-  }(events{}, decltype(all_events(typename value_type<T>::type{})){});
+  static constexpr auto dispatchable =
+    []<class... TStates>(mp::type_list<TStates...>) {
+      return (requires { utility::declval<T>()(utility::declval<TStates&>(), utility::declval<TEvent>()); } or ...) or
+             (requires { utility::declval<T>()()(utility::declval<TStates&>(), utility::declval<TEvent>()); } or ...);
+    }(states{});
 
+ public:
   constexpr sm(const T& t) : t_{t} { }
 
-  template<class TEvent> requires has_event<TEvent>
+  template<class TEvent> requires dispatchable<TEvent>
   constexpr auto process_event(const TEvent& event) -> bool {
     return utility::visit([&](const auto& state) {
       if constexpr (requires { states_ = *t_()(state, event); }) {
@@ -324,8 +326,7 @@ class sm {
 
  private:
   [[no_unique_address]] T t_{};
-  [[no_unique_address]] mp::apply_t<utility::variant, states> states_ =
-    []<class TState, class... TStates>(const mp::type_list<TState, TStates...>&) { return TState{}; }(states{});
+  [[no_unique_address]] mp::apply_t<utility::variant, states> states_ = initial_state{};
 };
 
 struct X {}; // terminate state
