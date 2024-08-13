@@ -30,70 +30,66 @@
 [![MIT Licence](http://img.shields.io/badge/license-MIT-blue.svg)](https://opensource.org/license/mit)
 [![Version](https://badge.fury.io/gh/qlibs%2Fut.svg)](https://github.com/qlibs/sml/releases)
 [![build](https://img.shields.io/badge/build-blue.svg)](https://godbolt.org/z/Gcfncoo6r)
-[![Try it online](https://img.shields.io/badge/try%20it-online-blue.svg)](https://godbolt.org/z/44YrGeqbx)
+[![Try it online](https://img.shields.io/badge/try%20it-online-blue.svg)]()
 
   > https://en.wikipedia.org/wiki/Finite-state_machine
 
 ### Features
 
-- Single header (https://raw.githubusercontent.com/qlibs/sml/main/sml)
-    - Easy integration (see [FAQ](#faq))
-- Verifies itself upon include (aka run all tests via static_asserts but it can be disabled - see [FAQ](#faq))
-* Optimized run-time execution and binary size (see [performance](https://godbolt.org/z/W9rP94cYK))
-* Fast compilation times (see [benchmarks](https://github.com/qlibs/sml/blob/gh-pages/images/sml2.perf.png))
-* Declarative Domain Specific Language (see [API](#api))
+- Single header (https://raw.githubusercontent.com/qlibs/sml/main/sml - for integration see [FAQ](#faq))
+- Verifies itself upon include (can be disabled with `-DNTEST` - see [FAQ](#faq))
+- Optimized run-time execution, binary size, compilation-times (see [performance](https://godbolt.org/z/W9rP94cYK))
+- Minimal [API](#api)
 
 ### Requirements
 
 - C++20 ([Clang-15+, GCC-12+](https://en.cppreference.com/w/cpp/compiler_support))
 
-    - No dependencies (Neither Boost nor STL is required)
-    - No `virtual` used (-fno-rtti)
-    - No `exceptions` required (-fno-exceptions)
+  - No dependencies (Neither `Boost` nor `STL` is required)
+  - No `virtual` used (-fno-rtti)
+  - No `exceptions` required (-fno-exceptions)
+  - `static_assert(1u == sizeof(sm));`
 
 ---
 
 ### Overview
 
-<p align="center"><img src="https://github.com/qlibs/sml/blob/gh-pages/images/example.png" /></p>
+<p align="center"><img src="https://www.planttext.com/api/plantuml/png/VP112uCm38Nl-HKv3zpkEmnX-nSYucnmWPgAZVlzYsuM2yFUqlU-zzAMKTj9vy5Z5qIeKmvo7gK7PVM4ztG9W5YTQaodA6xuuFZ3o9c-7rTzmwLVYElMWHSawtrwZY_3CjSEiv0lbinhIwR-iuzBKeKSctVhsM5jVHD5qaPve33hGKXQzS2QFTEiBiq09OcptuGF" /></p>
 
 ```cpp
-// events
-struct connect {};
-struct ping { bool valid = false; };
-struct established {};
-struct timeout {};
-struct disconnect {};
+// states
+struct Disconnected {};
+struct Connecting {};
+struct Connected {};
 
-int main() {
-  // state machine
-  sml::sm connection = [] {
-    // guards
-    auto is_valid  = [](const auto& event) { return event.valid; };
+// guards/actions
+auto establish = []{ };
+auto close = []{ };
+auto reset_timeout = []{ };
 
-    // actions
-    auto establish = [] { std::puts("establish"); };
-    auto close     = [] { std::puts("close"); };
-    auto setup     = [] { std::puts("setup"); };
+// transitions
+sml::sm connection = sml::overload{
+  [](Disconnected, connect)            -> Connecting   { establish(); return {}; },
+  [](Connecting,   established)        -> Connected    { return {}; },
+  [](Connected,    const ping& event)                  { if (event.valid) { reset_timeout(); } },
+  [](Connected,    timeout)            -> Connecting   { establish(); return {}; },
+  [](Connected,    disconnect)         -> Disconnected { close(); return {}; },
+};
 
-    using namespace sml::dsl;
-    /**
-     * src_state + event [ guard ] / action = dst_state
-     */
-    return transition_table{
-      *"Disconnected"_s + event<connect> / establish    = "Connecting"_s,
-       "Connecting"_s   + event<established>            = "Connected"_s,
-       "Connected"_s    + event<ping>[is_valid] / setup,
-       "Connected"_s    + event<timeout> / establish    = "Connecting"_s,
-       "Connected"_s    + event<disconnect> / close     = "Disconnected"_s,
-    };
-  };
+static_assert(sizeof(connection) == 1u);
+expect(connection.is<Disconnected>());
 
-  connection.process_event(connect{});
-  connection.process_event(established{});
-  connection.process_event(ping{.valid = true});
-  connection.process_event(disconnect{});
-}
+expect(connection.process_event(connect{}));
+expect(connection.is<Connecting>());
+
+expect(connection.process_event(established{}));
+expect(connection.is<Connected>());
+
+expect(connection.process_event(ping{.valid = true}));
+expect(connection.is<Connected>());
+
+expect(connection.process_event(disconnect{}));
+expect(connection.is<Disconnected>());
 ```
 
 ---
@@ -108,75 +104,13 @@ int main() {
 
 ### FAQ
 
-- Why would I use a state machine?
-
-    > State machine helps with understanding of the application flow as well as with avoiding spaghetti code.
-      The more booleans/enums/conditions there are the harder is to understand the implicit state of the program.
-      State machines make the state explicit which makes the code easier to follow,change and maintain.
-      Its worth noticing that state machines are not required by any means (there is no silver bullet),
-      switch-case, if-else, co-routines, state pattern, etc. can be used instead. Use your own judgment and
-      experience when choosing a solution based its trade-offs.
-
-- What UML2.5 features are supported and what features will be supported?
-
-    > ATM `SML` supports basic UML features such as transitions, processing events, unexpected events, etc.
-      Please follow tests/examples to stay up to date with available features - https://github.com/qlibs/sml/blob/main/sml#L388
-      There is plan to add more features, potentially up to full UML-2.5 support.
-
-- How does it compare to implementing state machines with co-routines?
-
-   > Its a different approach. Either has its pros and cons. Co-routines are easier to be executed in parallel but they have performance overhead.
-     Co-routines based state machines are written in imperative style whilst SML is using declarative Domain Specific Language (DSL).
-     More information can be found here - https://youtu.be/Zb6xcd2as6o?t=1529
-
-- SML vs UML?
-
-    > `SML` follows UML-2.5 - http://www.omg.org/spec/UML/2.5 - as closeily as possible but it has limited features ATM.
-
-- Can I use `SML` at compile-time?
-
-    > Yes. `SML` is fully compile-time but it can be executed at run-time as well. The run-time is primary use case for `SML`.
-
-- Can I disable running tests at compile-time for faster compilation times?
-
-    > When `NTEST` is defined static_asserts tests wont be executed upon inclusion.
-    Note: Use with caution as disabling tests means that there are no guarantees upon inclusion that the given compiler/env combination works as expected.
-
-- Is `SML` SFINAE friendly?
-
-    > Yes, `SML` is SFINAE (Substitution Failure Is Not An Error) friendly, especially the call to `process_event`.
-
-- How to pass dependencies to guards/actions?
-
-    ```cpp
-    struct foo {
-      bool value{};
-
-      constexpr auto operator()() const {
-        auto guard = [this] { return value; }; // dependency capctured by this
-        return transition_table{
-            *"s1"_s + event<e1>[guard] = "s2"_s,
-        };
-      }
-    };
-
-    sml::sm sm{foo{.value = 42}); // inject value into foo
-    ```
-
-- Is `SML` suitable for embedded systems?
-
-    > Yes, `SML` doesnt have any extenal dependencies, compiles without RTTI and without exceptions.
-      Its also focused on performance, binary size and memory footprint.
-      The following command compiiles without issues:
-      `$CXX -std=c++20 -Ofast -fno-rtti -fno-exceptions -Wall -Wextra -Werror -pedantic -pedantic-errors example.cpp`
-
 - How to integrate with CMake/CPM?
 
     ```
     CPMAddPackage(
       Name sml
       GITHUB_REPOSITORY qlibs/sml
-      GIT_TAG v2.0.0
+      GIT_TAG v3.0.0
     )
     add_library(sml INTERFACE)
     target_include_directories(sml SYSTEM INTERFACE ${sml_SOURCE_DIR})
@@ -186,552 +120,228 @@ int main() {
     ```
     target_link_libraries(${PROJECT_NAME} qlibs::sml);
     ```
-
-- Is there a Rust version?
-
-    > Rust - `SML` version can be found here - https://gist.github.com/krzysztof-jusiak/079f80e9d8c472b2c8d515cbf07ad665
 <!--
 #endif
 
 #pragma once
-#pragma GCC system_header
 
-namespace sml::inline v_2_0_0 {
-namespace meta {
-template <class...>
-struct type_list {};
+namespace sml::inline v3_0_0 {
+namespace type_traits {
+struct none {};
+template<class...> inline constexpr auto is_same_v = false;
+template<class T> inline constexpr auto is_same_v<T, T> = true;
+template<class T> struct remove_reference { using type = T; };
+template<class T> struct remove_reference<T&> { using type = T; };
+template<class T> struct remove_reference<T&&> { using type = T; };
+template<class T> using remove_reference_t = typename remove_reference<T>::type;
+template<class T> struct remove_cv { using type = T; };
+template<class T> struct remove_cv<const T> { using type = T; };
+template<class T> struct remove_cv<volatile T> { using type = T; };
+template<class T> struct remove_cv<const volatile T> { using type = T; };
+template<class T> using remove_cv_t = typename remove_cv<T>::type;
+template<class T> using remove_cvref_t = remove_cv_t<remove_reference_t<T>>;
+namespace detail {
+template<bool> struct conditional;
+template<> struct conditional<false> { template<class, class T> using fn = T; };
+template<> struct conditional<true>  { template<class T, class> using fn = T; };
+} // namespace detail
+template<bool B, class T, class F>
+struct conditional { using type = typename detail::conditional<B>::template fn<T, F>; };
+template<bool B, class T, class F>
+using conditional_t = typename detail::conditional<B>::template fn<T, F>;
+template<class T> struct value_type { using type = T; };
+template<class T> requires requires { typename T::value_type; } struct value_type<T> { using type = typename T::value_type; };
+template<class> struct transition_traits;
+template<class T> requires requires { &T::operator(); }
+struct transition_traits<T> : transition_traits<decltype(&T::operator())> { };
+template<class T> requires requires { &T::template operator()<none>; }
+struct transition_traits<T> : transition_traits<decltype(&T::template operator()<none>)> { };
+template<class T> requires requires { &T::template operator()<none, none>; }
+struct transition_traits<T> : transition_traits<decltype(&T::template operator()<none, none>)> { };
+template<class T, class TSrc, class TEvent, class TDst> struct transition_traits<auto (T::*)(TSrc, TEvent) const -> TDst> {
+  using src = remove_cvref_t<TSrc>;
+  using event = remove_cvref_t<TEvent>;
+  using dst = typename value_type<remove_cvref_t<TDst>>::type;
+};
+template<class T, class TSrc, class TEvent, class TDst> struct transition_traits<auto (T::*)(TSrc, TEvent) -> TDst> {
+  using src = remove_cvref_t<TSrc>;
+  using event = remove_cvref_t<TEvent>;
+  using dst = typename value_type<remove_cvref_t<TDst>>::type;
+};
+} // namespace type_traits
+namespace mp {
+template<class...> struct type_list {};
 template<class... Ts> struct inherit : Ts... {};
-template <int...>
-struct index_sequence {};
-template <class T, T... Ns>
-using integer_sequence = index_sequence<Ns...>;
-template <auto N>
-using make_index_sequence =
-#if __has_builtin(__make_integer_seq)
-    __make_integer_seq<integer_sequence, decltype(N), N>;
-#elif __has_builtin(__integer_pack)
-    index_sequence<__integer_pack(N)...>;
-#endif
-
-template <class... T, template <class...> class TList, class... Ts>
-auto append(TList<Ts...>) -> TList<Ts..., T...>;
-
-template <class T> auto declval() -> T&&;
-
-template <auto Size>
-struct fixed_string {
-  constexpr fixed_string() = default;
-  constexpr explicit(false) fixed_string(const char (&str)[Size]) { for (auto i = 0u; i < Size; ++i) { data[i] = str[i]; } }
-  static constexpr auto size() { return Size; }
-  char data[Size]{};
-};
-template <auto Size> fixed_string(const char (&)[Size]) -> fixed_string<Size>;
-} // meta
-
-namespace back {
-struct on_entry {};
-struct on_exit {};
-template <class... Ts>
-struct pool : Ts... {
-  constexpr explicit(true) pool(Ts... ts) : Ts{ts}... {}
+template<class> struct wrapper {};
+template<class...> struct unique;
+template<class T, class... Ts, class... Rs>
+struct unique<type_list<T, Ts...>, inherit<Rs...>> :
+  type_traits::conditional_t<
+    __is_same(T, void) or __is_same(T, type_traits::none) or __is_base_of(wrapper<T>, inherit<wrapper<Rs>...>),
+    unique<type_list<Ts...>, inherit<Rs...>>,
+    unique<type_list<Ts...>, inherit<Rs..., T>>
+  > { };
+template<class... Rs> struct unique<type_list<>, inherit<Rs...>> { using type = type_list<Rs...>; };
+template<class... Ts> using unique_t = typename unique<type_list<Ts...>, inherit<>>::type;
+template<template <class...> class, class> struct apply;
+template<template <class...> class TList, template <class...> class T, class... Ts>
+struct apply<TList, T<Ts...>> { using type = TList<Ts...>; };
+template<template <class...> class TList, class T> using apply_t = typename apply<TList, T>::type;
+} // namespace mp
+namespace utility {
+template<class T> auto declval() -> T&&;
+template<class... Ts> requires (__is_empty(Ts) and ...)
+struct variant {
+  template<class T> constexpr variant(const T&) requires (type_traits::is_same_v<T, Ts> or ...)
+    : index{[]() -> decltype(index) {
+        bool match[]{type_traits::is_same_v<Ts, T>...};
+        for (auto i = 0u; i < sizeof...(Ts); ++i) if (match[i]) return i;
+        return {};
+      }()} { }
+  unsigned char index{};
 };
 
-template <class...> class sm;
-template <template <class...> class TList, class... Transitions>
-class sm<TList<Transitions...>> {
-  static constexpr auto num_of_regions = (Transitions::initial + ...);
+template<class Fn, class... Ts>
+[[nodiscard]] constexpr auto visit(Fn fn, const variant<Ts...>& v) {
+  bool (*dispatch[])(Fn){[](Fn fn) { return fn(Ts{}); }...};
+  return dispatch[v.index](fn);
+}
+} // namespace utility
 
-  template<class> struct state_id {
-    int id{};
+struct X {}; /// terminate state
+
+template<class T>
+class sm {
+  template<class R> struct value_type {
+    using type = typename R::value_type;
   };
-  template<class... Ts>
-  struct state_ids final : state_id<Ts>... {
-    constexpr explicit(false) state_ids(int i = {}) : state_id<Ts>{i++}... { }
-    template<class T> [[nodiscard]] consteval auto get() const {
-      return static_cast<state_id<T>>(*this).id;
-    }
-  };
-  template<auto> struct state {
-    consteval auto friend get(state);
-  };
-  template <auto N, class T>
-  struct prediction final {
-    static constexpr auto next = N;
-    using type = T;
-  };
-  template <class, auto>
-  struct cache final {
-    consteval auto friend get(cache);
-  };
-  template <class, auto>
-  struct predict final {
-    consteval auto friend get(predict);
-  };
-  template <class T, class R>
-  struct assign final {
-    consteval auto friend get(T) { return R{}; }
+  template<class R> requires requires(R t) { t(); }
+  struct value_type<R> {
+    using type = typename type_traits::remove_cvref_t<decltype(utility::declval<R>()())>::value_type;
   };
 
-  template <class TEvent, class T, auto N, auto I = 0>
-  static consteval auto set_transition_impl() {
-    if constexpr (requires { get(predict<TEvent, N>{}); }) {
-      using predicted = decltype(get(predict<TEvent, N>{}));
-      using updated = decltype(meta::append<T>(typename predicted::type{}));
-      assign<cache<TEvent, predicted::next>, updated>();
-      assign<predict<TEvent, N + 1>, prediction<predicted::next + 1, updated>>();
-    } else if constexpr (requires { get(cache<TEvent, I>{}); }) {
-      set_transition_impl<TEvent, T, N, I + 1>();
-    } else if constexpr (not I) {
-      assign<cache<TEvent, I>, meta::type_list<T>>();
-      assign<predict<TEvent, N + 1>, prediction<I + 1, meta::type_list<T>>>();
-    } else {
-      using updated = decltype(meta::append<T>(get(cache<TEvent, I - 1>{})));
-      assign<cache<TEvent, I>, updated>();
-      assign<predict<TEvent, N + 1>, prediction<I + 1, updated>>();
-    }
-  }
+  template<class... Ts> static auto unique_states(mp::type_list<Ts...>) ->
+    mp::unique_t<typename type_traits::transition_traits<Ts>::src..., typename type_traits::transition_traits<Ts>::dst...>;
 
-  template <class T, auto N, class... TEvents>
-  static consteval auto set_transition(meta::type_list<TEvents...>) {
-    (set_transition_impl<TEvents, T, N>(), ...);
-    return N;
-  }
+  template<class... Ts> static auto all_events(mp::type_list<Ts...>) ->
+    mp::type_list<typename type_traits::transition_traits<Ts>::event...>;
 
-  template <class TEvent, auto I = 1>
-  [[nodiscard]] static consteval auto get_transitions() {
-    if constexpr (requires { get(cache<TEvent, I>{}); }) {
-      return get_transitions<TEvent, I + 1>();
-    } else if constexpr (requires { get(cache<TEvent, I - 1>{}); }) {  // can be unexpected
-      return get(cache<TEvent, I - 1>{});
-    }
-  }
-
-  template<auto N, class T>
-  static constexpr auto set_state() {
-    if constexpr (N == 0) {
-      assign<state<N>, meta::inherit<T>>();
-    } else if constexpr (constexpr auto states = get(state<N-1>{}); __is_base_of(T, decltype(states))) {
-      assign<state<N>, decltype(states)>();
-    } else {
-      assign<state<N>, decltype(meta::append<T>(states))>();
-    }
-    return N;
-  }
-
-  static_assert(
-    ([]<auto... Ns>(meta::index_sequence<Ns...>) {
-      []<auto...>{}.template operator()<
-        set_transition<Transitions, Ns>(typename Transitions::event{})...,
-        set_state<Ns, typename Transitions::src>()...,
-        set_state<Ns + int(sizeof...(Ns)), typename Transitions::dst>()...
-      >();
-    }(meta::make_index_sequence<sizeof...(Transitions)>{}), true)
-  );
+  template<class... Ts> static auto unique_events(mp::type_list<Ts...>) ->
+    mp::unique_t<typename type_traits::transition_traits<Ts>::event...>;
 
  public:
-  static constexpr auto states = get(state<int(sizeof...(Transitions))*2-1>{});
-  static constexpr auto ids = []<class... Ts>(meta::inherit<Ts...>) { return state_ids<Ts...>{}; }(states);
+  using states = decltype(unique_states(typename value_type<T>::type{}));
+  using events = decltype(unique_events(typename value_type<T>::type{}));
 
-  template<class TransitionTable>
-  constexpr explicit(true) sm(TransitionTable&& transition_table)
-      : transition_table_{static_cast<TransitionTable&&>(transition_table)} {
-    init();
-    start();
+  template<class TEvent>
+  static constexpr bool has_event = []<class... TEvents, class... Ts>(mp::type_list<TEvents...>, mp::type_list<Ts...>) {
+    return (type_traits::is_same_v<Ts, type_traits::none> or ...) ? true : (type_traits::is_same_v<TEvents, TEvent> or ...);
+  }(events{}, decltype(all_events(typename value_type<T>::type{})){});
+
+  constexpr sm(const T& t) : t_{t} { }
+
+  template<class TEvent> requires has_event<TEvent>
+  constexpr auto process_event(const TEvent& event) -> bool {
+    return utility::visit([&](const auto& state) {
+      if constexpr (requires { states_ = *t_()(state, event); }) {
+        if (auto r = t_()(state, event); r) {
+          states_ = *r;
+          return true;
+        }
+        return false;
+      } else if constexpr (requires { states_ = t_()(state, event); }) {
+        states_ = t_()(state, event);
+        return true;
+      } else  if constexpr (requires { t_()(state, event); }) {
+        t_()(state, event);
+        return true;
+      } else if constexpr (requires { states_ = t_(state, event); }) {
+        states_ = t_(state, event);
+        return true;
+      } else if constexpr (requires { states_ = *t_(state, event); }) {
+        if (auto r = t_(state, event); r) {
+          states_ = *r;
+          return true;
+        }
+        return false;
+      } else  if constexpr (requires { t_(state, event); }) {
+        t_(state, event);
+        return true;
+      } else {
+        return false;
+      }
+    }, states_);
   }
 
-  template <class TEvent, const auto transitions = get_transitions<TEvent>()>
-  constexpr auto process_event(const TEvent& event, auto&&... args) -> bool {
-    if constexpr (num_of_regions == 0u) {
-      return process_event_0<TEvent>(event, transitions, args...);
-    } else if constexpr (num_of_regions == 1u) {
-      return process_event_1<TEvent>(event, current_state_[0], transitions, args...);
-    } else {
-      return process_event_N<TEvent>(event, transitions, meta::make_index_sequence<num_of_regions>{}, args...);
-    }
-  }
-
-  template<class... TStates>
-  [[nodiscard]] constexpr auto is(const TStates...) const -> bool requires (num_of_regions > 0u) {
-    return [this]<auto... Ns>(meta::index_sequence<Ns...>) {
-      return ((ids.template get<typename TStates::src>() == current_state_[Ns]) and ...);
-    }(meta::make_index_sequence<num_of_regions>{});
+  template<class... TStates> [[nodiscard]] constexpr auto is() const -> bool {
+    return utility::visit([&]<class TState>(const TState&) { return (type_traits::is_same_v<TStates, TState> and ...); }, states_);
   }
 
  private:
-  using state_t = decltype([]<class... Ts>(meta::inherit<Ts...>) {
-    if constexpr (sizeof...(Ts) < 255) {
-      return (unsigned char){};
-    } else {
-      return (unsigned short){};
-    }
-  }(states));
-
-  constexpr auto start() {
-    if constexpr (requires { process_event(back::on_entry{}); }) {
-      process_event(back::on_entry{});
-    }
-  }
-
-  constexpr auto init() {
-    auto i = 0;
-    ([&, this] {
-     if constexpr (Transitions::initial) {
-      current_state_[i++] = ids.template get<typename Transitions::src>();
-     }
-    }(), ...);
-  }
-
-  template <class TEvent, class T>
-  constexpr auto process_event_0(const TEvent& event, meta::type_list<T>,
-                                 auto&&... args) -> bool {
-    state_t arg{};
-    return static_cast<T&>(transition_table_)(event, arg, *this, args...);
-  }
-
-  template <class TEvent, class... Ts>
-  constexpr auto process_event_0(const TEvent& event, meta::type_list<Ts...>, auto&&... args) -> bool {
-    return (process_event_0(event, meta::type_list<Ts>{}, args...) or ...);
-  }
-
-  template <class TEvent, class T>
-  constexpr auto process_event_1(const TEvent& event, auto& current_state, meta::type_list<T>, auto&&... args) -> bool {
-    if constexpr (T::src::size > 1) {
-      return ids.template get<typename T::src>() == current_state and static_cast<T&>(transition_table_)(event, current_state, *this, args...);
-    } else { // any state
-      return static_cast<T&>(transition_table_)(event, current_state, *this, args...);
-    }
-  }
-
-  template <class TEvent, class... Ts>
-  constexpr auto process_event_1(const TEvent& event, auto& current_state, meta::type_list<Ts...>, auto&&... args) -> bool {
-    return (process_event_1(event, current_state, meta::type_list<Ts>{}, args...) or ...);
-  }
-
-  template <class TEvent, auto... Rs>
-  constexpr auto process_event_N(const TEvent& event, const auto& transitions, meta::index_sequence<Rs...>, auto&&... args) -> bool {
-    return (process_event_1<TEvent>(event, current_state_[Rs], transitions, args...) or ...);
-  }
-
-  [[no_unique_address]] TList<Transitions...> transition_table_{};
-  [[no_unique_address]] state_t current_state_[num_of_regions ? num_of_regions : 1]{};
-};
-}  // namespace back
-
-namespace front {
-namespace concepts {
-struct invocable_base {
-  void operator()();
-};
-template <class T>
-struct invocable_impl : T, invocable_base {};
-template <class T>
-concept invocable = not requires { &invocable_impl<T>::operator(); };
-}  // namespace concepts
-
-[[nodiscard]] constexpr auto invoke(const auto& fn, const auto& event,
-                                    auto& self, auto&&... args) {
-  if constexpr (requires { fn(event, args...); }) {
-    return fn(event, args...);
-  } else if constexpr (requires { fn(event); }) {
-    return fn(event);
-  } else if constexpr (requires { fn(self, event, args...); }) {
-    return fn(self, event, args...);
-  } else {
-    return fn();
-  }
-}
-
-constexpr void process_event(auto& self, const auto& event, auto&&... args) {
-  if constexpr (requires { self.process_event(event, args...); }) {
-    self.process_event(event, args...);
-  }
-}
-
-namespace detail {
-struct anonymous{};
-constexpr auto none = [] {};
-constexpr auto always = [] { return true; };
-}  // namespace detail
-
-template <const auto Initial, class TSrc, class TDst, class TEvent = detail::anonymous, class TGuard = decltype(detail::always), class TAction = decltype(detail::none)>
-struct transition {
-  using src = TSrc;
-  using dst = TDst;
-  using event = TEvent;
-
-  static constexpr auto initial = Initial;
-
-  [[nodiscard]] constexpr auto operator*() const {
-    return transition<true, TSrc, TDst, TEvent, TGuard, TAction>{.guard = guard, .action = action};
-  }
-
-  template <class T>
-  [[nodiscard]] constexpr auto operator+(const T& t) const {
-    return transition<initial, TSrc, TDst, typename T::event, decltype(T::guard), decltype(T::action)>{.guard = t.guard, .action = t.action};
-  }
-
-  template <class T>
-  [[nodiscard]] constexpr auto operator[](const T& guard) const {
-    return transition<initial, TSrc, TDst, TEvent, T>{.guard = guard, .action = action};
-  }
-
-  template <class T>
-  [[nodiscard]] constexpr auto operator/(const T& action) const {
-    return transition<initial, TSrc, TDst, TEvent, TGuard, T>{.guard = guard, .action = action};
-  }
-
-  template <class T>
-  [[nodiscard]] constexpr auto operator=(const T&) const {
-    return transition<initial, TSrc, typename T::src, TEvent, TGuard, TAction>{.guard = guard, .action = action};
-  }
-
-  [[nodiscard]] constexpr auto operator()(const back::on_entry& event, [[maybe_unused]] auto& current_state, auto& self, auto&&... args) -> bool {
-    using R = decltype(invoke(guard, event, self, args...));
-    if constexpr ( requires { R::value; }) {
-      if constexpr (R::value) {
-        invoke(action, event, self, args...);
-        static_assert(not dst::size, "[ERROR] on_entry can't have dst state!");
-        return true;
-      }
-    } else {
-      if (invoke(guard, event, self, args...)) {
-        invoke(action, event, self, args...);
-        static_assert(not dst::size, "[ERROR] on_entry can't have dst state!");
-        return true;
-      }
-    }
-    return false;
-  }
-
-  [[nodiscard]] constexpr auto operator()(const back::on_exit& event, [[maybe_unused]] auto& current_state, auto& self, auto&&... args) -> bool {
-    using R = decltype(invoke(guard, event, self, args...));
-    if constexpr ( requires { R::value; }) {
-      if constexpr (R::value) {
-        invoke(action, event, self, args...);
-        static_assert(not dst::size, "[ERROR] on_exit can't have dst state!");
-        return true;
-      }
-    } else {
-      if (invoke(guard, event, self, args...)) {
-        invoke(action, event, self, args...);
-        static_assert(not dst::size, "[ERROR] on_exit can't have dst state!");
-        return true;
-      }
-    }
-    return false;
-  }
-
-  template<class TSelf>
-  [[nodiscard]] constexpr auto operator()(const auto& event,
-                                          [[maybe_unused]] auto& current_state,
-                                          TSelf& self, auto&&... args) -> bool {
-    using R = decltype(invoke(guard, event, self, args...));
-    if constexpr (requires { R::value; }) {
-      if constexpr (R::value) {
-        if constexpr (dst::size) {
-          process_event(self, back::on_exit{}, args...);
-          current_state = TSelf::ids.template get<dst>();
-        }
-        invoke(action, event, self, args...);
-        if constexpr (dst::size) {
-          process_event(self, back::on_entry{}, args...);
-        }
-        return true;
-      }
-    } else {
-      if (invoke(guard, event, self, args...)) {
-        if constexpr (dst::size) {
-          process_event(self, back::on_exit{}, args...);
-          current_state = TSelf::ids.template get<dst>();
-        }
-        invoke(action, event, self, args...);
-        if constexpr (dst::size) {
-          process_event(self, back::on_entry{}, args...);
-        }
-        return true;
-      }
-    }
-    return false;
-  }
-
-  [[no_unique_address]] TGuard guard;
-  [[no_unique_address]] TAction action;
+  [[no_unique_address]] T t_{};
+  [[no_unique_address]] mp::apply_t<utility::variant, states> states_ =
+    []<class TState, class... TStates>(const mp::type_list<TState, TStates...>&) { return TState{}; }(states{});
 };
 
-template<char... Cs> struct state {
-  static constexpr auto size = sizeof...(Cs);
-  static constexpr char name[]{Cs..., 0};
-  static constexpr auto c_str() { return name; }
+template<class... Ts> struct overload : Ts... {
+  using value_type = mp::type_list<Ts...>;
+  using Ts::operator()...;
 };
+template<class... Ts> overload(Ts...) -> overload<Ts...>;
 
-template <class... TEvents>
-inline constexpr auto event = transition<false, state<>, state<>, meta::type_list<TEvents...>>{};
-inline constexpr auto on_entry = event<back::on_entry>;
-inline constexpr auto on_exit = event<back::on_exit>;
-
-template <meta::fixed_string State>
-[[nodiscard]] constexpr auto operator""_s() {
-  return []<auto... Ns>(meta::index_sequence<Ns...>) {
-    return transition<false, state<State.data[Ns]...>, state<>>{};
-  }(meta::make_index_sequence<State.size()>{});
-}
-
-[[nodiscard]] constexpr auto operator,(const concepts::invocable auto& lhs,
-                                       const concepts::invocable auto& rhs) {
-  return [=](auto& self, const auto& event, auto&&... args) {
-    invoke(lhs, event, self, args...);
-    invoke(rhs, event, self, args...);
-  };
-}
-[[nodiscard]] constexpr auto operator and(const concepts::invocable auto& lhs,
-                                          const concepts::invocable auto& rhs) {
-  return [=](auto& self, const auto& event, auto&&... args) {
-    return invoke(lhs, event, self, args...) and
-           invoke(rhs, event, self, args...);
-  };
-}
-[[nodiscard]] constexpr auto operator or(const concepts::invocable auto& lhs,
-                                         const concepts::invocable auto& rhs) {
-  return [=](auto& self, const auto& event, auto&&... args) {
-    return invoke(lhs, event, self, args...) or
-           invoke(rhs, event, self, args...);
-  };
-}
-[[nodiscard]] constexpr auto operator not(const concepts::invocable auto& t) {
-  return [=](auto& self, const auto& event, auto&&... args) {
-    return not invoke(t, event, self, args...);
-  };
-}
-}  // namespace front
-
-template <class T>
-struct sm final : back::sm<decltype(meta::declval<T>()())> {
-  constexpr explicit(false) sm(T&& t)
-      : back::sm<decltype(meta::declval<T>()())>{t()} {}
+template<class T> struct maybe {
+  using value_type = T;
+  constexpr maybe() = default;
+  constexpr maybe(const T& t) : t{t}, flag{true} { }
+  constexpr operator bool() const { return flag; }
+  constexpr const T& operator*() const { return t; }
+  T t{};
+  bool flag{};
 };
-template <class T>
-sm(T&&) -> sm<T>;
-
-namespace dsl {
-template <class... Ts>
-struct transition_table final : back::pool<Ts...> {
-  constexpr explicit(false) transition_table(Ts&&... ts)
-      : back::pool<Ts...>{static_cast<Ts&&>(ts)...} {}
-  static_assert(
-      (Ts::initial + ...) >= 1,
-      "[ERROR] At least one `*state` (orthogonal region) is required!");
-};
-template <class... Ts>
-struct dispatch_table final : back::pool<Ts...> {
-  constexpr explicit(false) dispatch_table(Ts&&... ts)
-      : back::pool<Ts...>{static_cast<Ts&&>(ts)...} {}
-};
-using front::event;
-using front::on_entry;
-using front::on_exit;
-using front::operator""_s;
-using front::operator, ;
-using front::operator not;
-using front::operator and;
-using front::operator or;
-constexpr auto otherwise = [] { return true; };
-constexpr auto _ = ""_s;   // any state
-constexpr auto X = "X"_s;  // terminate state
-constexpr auto process = [](const auto& event) {
-  return [event](auto& self, const auto&, auto&&... args) {
-    self.process_event(event, args...);
-  };
-};
-} // dsl
-} // sml
+} // namespace sml
 
 #ifndef NTEST
-namespace sml::test {
-template<auto V>
-struct bool_constant {
-  static constexpr auto value = V;
-};
-} // sml::test
-
 static_assert(([] {
   constexpr auto expect = [](bool cond) { if (not cond) { void failed(); failed(); } };
 
-  using namespace sml;
-  using dsl::operator""_s;
+  /// states
+  struct idle {};
+  struct s1 {};
+  struct s2 {};
+  struct s3 {};
+  struct s4 {};
 
+  /// events
   struct e1 {};
   struct e2 {};
   struct e3 {};
   struct e { int value{}; };
   struct unexpected {};
 
-  // meta::index_sequence
+  // sml::mp
   {
-    static_assert(__is_same(meta::index_sequence<>, meta::make_index_sequence<0>));
-    static_assert(__is_same(meta::index_sequence<0>, meta::make_index_sequence<1>));
-    static_assert(__is_same(meta::index_sequence<0,1>, meta::make_index_sequence<2>));
+    using sml::mp::type_list;
+    using sml::type_traits::is_same_v;
+
+    // unique_t
+    {
+      static_assert(is_same_v<type_list<int>, sml::mp::unique_t<int>>);
+      static_assert(is_same_v<type_list<int, double>, sml::mp::unique_t<int, double>>);
+      static_assert(is_same_v<type_list<int>, sml::mp::unique_t<int, int>>);
+    }
   }
 
-  // meta::append
+  // sml::sm::process_event
   {
-    static_assert(__is_same(meta::type_list<int>, decltype(meta::append<int>(meta::type_list{}))));
-    static_assert(__is_same(meta::type_list<int, float>, decltype(meta::append<int, float>(meta::type_list{}))));
-    static_assert(__is_same(meta::type_list<int, float>, decltype(meta::append<float>(meta::type_list<int>{}))));
-    static_assert(__is_same(meta::type_list<float, int>, decltype(meta::append<int>(meta::type_list<float>{}))));
-  }
-
-  // meta::fixed_string
-  {
-    static_assert(sizeof("") == meta::fixed_string("").size());
-    static_assert(sizeof("foo") == meta::fixed_string("foo").size());
-    static_assert('f' == meta::fixed_string("foo").data[0]);
-    static_assert('o' == meta::fixed_string("foo").data[1]);
-    static_assert('o' == meta::fixed_string("foo").data[2]);
-  }
-
-  // front::state
-  {
-    static_assert('f' == front::state<'f', 'o', 'o'>::c_str()[0]);
-    static_assert('o' == front::state<'f', 'o', 'o'>::c_str()[1]);
-    static_assert('o' == front::state<'f', 'o', 'o'>::c_str()[2]);
-    static_assert(0 == front::state<'f', 'o', 'o'>::c_str()[3]);
-  }
-
-  // ctor
-  {
-    struct test {
-      constexpr auto operator()() const {
-        using namespace dsl;
-        return transition_table{
-            *"s1"_s + event<e1> = "s2"_s,
-        };
-      }
-    };
-
-    test t;
-    sm sm1{t};
-    sm sm2{test{}};
-    expect(sm1.is("s1"_s));
-    expect(sm1.process_event(e1{}));
-    expect(sm1.is("s2"_s));
-    expect(sm2.is("s1"_s));
-    expect(sm2.process_event(e1{}));
-    expect(sm2.is("s2"_s));
-  }
-
-  // process_event
-  {
-    sm sm = [] {
-      using namespace dsl;
-      return transition_table{
-          *"s1"_s + event<e1> = "s2"_s,
-      };
+    sml::sm sm = sml::overload{
+      [](s1, e1) -> s2 { return {}; }
     };
 
     expect(sm.process_event(e1{}));
-    expect(sm.is("s2"_s));
+    expect(sm.is<s2>());
   }
 
+#if 0
   // start[on_entry]
   {
     int on_entry_calls{};
@@ -744,7 +354,7 @@ static_assert(([] {
       };
     };
 
-    expect(sm.is("idle"_s));
+    expect(sm.is<idle>());
     expect(on_entry_calls == 1);
   }
 
@@ -766,13 +376,13 @@ static_assert(([] {
     };
 
     expect(sm.process_event(e1{}));
-    expect(sm.is("s2"_s));
+    expect(sm.is<s2>());
     expect(on_entry_calls == 1);
     expect(on_exit_calls == 0);
     expect(sm.process_event(e2{}));
     expect(on_entry_calls == 1);
     expect(on_exit_calls == 1);
-    expect(sm.is("s3"_s));
+    expect(sm.is<s3>());
   }
 
   // process_event[on_entry/on_exit] with internal transitions
@@ -793,89 +403,63 @@ static_assert(([] {
     };
 
     expect(sm.process_event(e1{}));
-    expect(sm.is("s2"_s));
+    expect(sm.is<s2>());
     expect(on_entry_calls == 1);
     expect(on_exit_calls == 0);
     expect(sm.process_event(e2{}));
     expect(on_entry_calls == 1);
     expect(on_exit_calls == 0);
-    expect(sm.is("s2"_s));
+    expect(sm.is<s2>());
   }
+#endif
 
   // process_event[same event multiple times]
   {
-    sm sm = [] {
-      using namespace dsl;
-      return transition_table{
-          *"s1"_s + event<e1> = "s2"_s,
-          "s2"_s + event<e1> = "s3"_s,
-      };
+    sml::sm sm = sml::overload{
+      [](s1, e1) -> s2 { return {}; },
+      [](s2, e1) -> s3 { return {}; },
     };
 
     expect(sm.process_event(e1{}));
-    expect(sm.is("s2"_s));
+    expect(sm.is<s2>());
     expect(sm.process_event(e1{}));
-    expect(sm.is("s3"_s));
-  }
-
-  // process_event[with parameters]
-  {
-    unsigned value{};
-
-    sm sm = [&] {
-      using namespace dsl;
-      auto action = [&](const auto& event, auto... args) {
-        value += event.value + (args + ...);
-      };
-      return transition_table{
-          *"s1"_s + event<e> / action,
-      };
-    };
-
-    expect(sm.process_event(e{.value = 1}, 2, 3));
-    expect(6 == value);
+    expect(sm.is<s3>());
   }
 
   // process_event[different events in any state]
   {
-    sm sm = [] {
-      using namespace dsl;
-      return transition_table{
-          *"s1"_s + event<e1> = "s2"_s,
-          "s2"_s + event<e2> = "s3"_s,
-          "s3"_s + event<e2> = X,
-          _ + event<e> = "s1"_s,
-      };
+    sml::sm sm = sml::overload{
+      [](s1, e1) -> s2 { return {}; },
+      [](s2, e2) -> s3 { return {}; },
+      [](s3, e2) -> sml::X { return {}; },
+      [](auto, e) -> s1 { return {}; },
     };
 
     expect(sm.process_event(e1{}));
-    expect(sm.is("s2"_s));
+    expect(sm.is<s2>());
 
     expect(sm.process_event(e{{}}));
-    expect(sm.is("s1"_s));
+    expect(sm.is<s1>());
     expect(not sm.process_event(e2{}));  // ignored
-    expect(sm.is("s1"_s));
+    expect(sm.is<s1>());
 
     expect(sm.process_event(e1{}));  // s1 -> s2
-    expect(sm.is("s2"_s));
+    expect(sm.is<s2>());
 
     expect(sm.process_event(e2{}));  // s2 -> s3
-    expect(sm.is("s3"_s));
+    expect(sm.is<s3>());
 
     expect(sm.process_event(e{}));  // _ -> s1
-    expect(sm.is("s1"_s));
+    expect(sm.is<s1>());
   }
 
   // proces_event[unexpected event]
   {
-    sm sm = [] {
-      using namespace dsl;
-      return transition_table{
-          *"s1"_s + event<e1> = "s2"_s,
-      };
+    sml::sm sm = sml::overload{
+      [](s1, e1) -> s2 { return {}; },
     };
 
-    constexpr auto process_event = [](auto event) {
+    constexpr auto process_event = [](const auto& event) {
       return requires { sm.process_event(event); };
     };
 
@@ -885,81 +469,67 @@ static_assert(([] {
 
   // events[multiple events]
   {
-    const auto test = [] {
-      using namespace dsl;
-      return transition_table{
-          *"s1"_s + event<e1, e2> = "s2"_s,
-      };
+    sml::sm test = sml::overload{
+      [](s1, auto) -> s2 { return {}; },
     };
 
     {
-      sm sm{test};
-      expect(sm.is("s1"_s));
+      sml::sm sm{test};
+      expect(sm.is<s1>());
       expect(sm.process_event(e1{}));
-      expect(sm.is("s2"_s));
+      expect(sm.is<s2>());
     }
 
     {
-      sm sm{test};
-      expect(sm.is("s1"_s));
+      sml::sm sm{test};
+      expect(sm.is<s1>());
       expect(sm.process_event(e2{}));
-      expect(sm.is("s2"_s));
+      expect(sm.is<s2>());
     }
   }
 
   // events[same event transitions]
   {
-    const auto test = [] {
-      using namespace dsl;
-      return transition_table{
-         *"idle"_s + event<e1> / [] {} = "s1"_s,
-          "s1"_s   + event<e1> / [] {} = "s2"_s,
-          "s2"_s   + event<e1> / [] {} = "idle"_s,
-      };
+    sml::sm sm = sml::overload{
+      [](idle, e1) -> s1 { return {}; },
+      [](s1, e1) -> s2 { return {}; },
+      [](s2, e1) -> idle { return {}; },
     };
 
-    sm sm{test};
-    expect(sm.is("idle"_s));
+    expect(sm.is<idle>());
     expect(sm.process_event(e1{}));
-    expect(sm.is("s1"_s));
+    expect(sm.is<s1>());
     expect(sm.process_event(e1{}));
-    expect(sm.is("s2"_s));
+    expect(sm.is<s2>());
     expect(sm.process_event(e1{}));
-    expect(sm.is("idle"_s));
+    expect(sm.is<idle>());
   }
 
   // transition_table[multiple transitions]
   {
-    sm sm = [] {
-      using namespace dsl;
-      return transition_table{
-          *"s1"_s + event<e1> = "s2"_s,
-           "s2"_s + event<e2> = "s1"_s,
-      };
+    sml::sm sm = sml::overload{
+      [](s1, e1) -> s2 { return {}; },
+      [](s2, e2) -> s1 { return {}; },
     };
 
-    expect(sm.is("s1"_s));
+    expect(sm.is<s1>());
     expect(sm.process_event(e1{}));
-    expect(sm.is("s2"_s));
+    expect(sm.is<s2>());
     expect(not sm.process_event(e1{}));
-    expect(sm.is("s2"_s));
+    expect(sm.is<s2>());
     expect(sm.process_event(e2{}));
-    expect(sm.is("s1"_s));
+    expect(sm.is<s1>());
   }
 
   // transition_table[terminated state]
   {
-    sm sm = [] {
-      using namespace dsl;
-      return transition_table{
-          *"s1"_s + event<e1> = X,
-      };
+    sml::sm sm = sml::overload{
+      [](s1, e1) -> sml::X { return {}; },
     };
 
-    using dsl::X;
-    expect(sm.is("s1"_s));
+    expect(sm.is<s1>());
     expect(sm.process_event(e1{}));
-    expect(sm.is(X));
+    expect(sm.is<sml::X>());
     expect(not sm.process_event(e1{}));
   }
 
@@ -967,61 +537,26 @@ static_assert(([] {
   {
     unsigned calls{};
 
-    sm sm = [&] {
-      using namespace dsl;
-      auto guard = [](const auto& event) { return event.value; };
-      auto action = [&] { ++calls; };
-      return transition_table{
-          *"s1"_s + event<e>[guard and (guard or guard)] / (action, action) = "s2"_s,
-      };
+    auto guard = [](const auto& event) { return event.value; };
+    auto action = [&] { ++calls; };
+
+    sml::sm sm = sml::overload{
+      [&](s1, const e& event) -> sml::maybe<s2> {
+        if (guard(event)) {
+          action();
+          return s2{};
+        }
+        return {};
+      },
     };
 
-    using dsl::operator""_s;
     expect(not sm.process_event(e{false}));
-    expect(sm.is("s1"_s));
+    expect(sm.is<s1>());
     expect(sm.process_event(e{true}));
-    expect(sm.is("s2"_s));
+    expect(sm.is<s2>());
   }
 
-  // transition_table[otherwise guard]
-  {
-    sm sm = [&] {
-      using namespace dsl;
-      constexpr auto guard = [](const auto& event) { return event.value; };
-      return transition_table{
-          *"s1"_s + event<e>[guard] = "s2"_s,
-          "s1"_s + event<e>[otherwise] = "s3"_s,
-      };
-    };
-
-    expect(sm.process_event(e{false}));
-    expect(sm.is("s3"_s));
-  }
-
-  // transition_table[constexpr guards]
-  {
-    struct e1 { int value{}; };
-    unsigned value{};
-
-    sm sm = [&] {
-      using namespace dsl;
-      auto ct_guard = [](const auto& event) {
-        return sml::test::bool_constant<requires { event.value; }>{};
-      };
-      auto action = [&](const auto& event) { value += event.value; };
-      return transition_table{
-          *"s1"_s + event<e1>[ct_guard] / action,
-          "s1"_s + event<e2>[ct_guard] / action,
-      };
-    };
-
-    expect(0 == value);
-    expect(sm.process_event(e1{.value = 42}));
-    expect(42 == value);
-    expect(not sm.process_event(e2{}));
-    expect(42 == value);
-  }
-
+#if 0
   // transition_table[process]
   {
     sm sm = [] {
@@ -1033,96 +568,74 @@ static_assert(([] {
     };
 
     expect(sm.process_event(e1{}));
-    expect(sm.is("s3"_s));
+    expect(sm.is<s3>());
   }
 
   // transition_table[orthogonal regions]
   {
-    sm sm = [] {
-      using namespace dsl;
-      return transition_table{
-          *"s1"_s + event<e1> = "s2"_s,
-          *"s3"_s + event<e2> = "s4"_s,
-      };
+    sml::sm sm = sml::overload{
+      sml::overload{
+        [](s1, e1) -> s2 { return {}; },
+      },
+      sml::overload{
+        [](s3, e2) -> s4 { return {}; },
+      }
     };
 
-    expect(sm.is("s1"_s, "s3"_s));
+    expect(sm.is<s1, s3>());
     expect(sm.process_event(e1{}));
-    expect(sm.is("s2"_s, "s3"_s));
+    expect(sm.is<s2, s3>());
     expect(sm.process_event(e2{}));
-    expect(sm.is("s2"_s, "s4"_s));
+    expect(sm.is<s2, s4>());
   }
 
   // transition_table[orthogonal regions]
   {
-    sm sm = [] {
-      using namespace dsl;
-      return transition_table{
-          *"s1"_s + event<e1> = "s2"_s,
-           "s2"_s + event<e2> = X,
-          // -------------------------
-          *"s3"_s + event<e3> = X,
-      };
+    using sml::X;
+
+    sml::sm sm = sml::overload{
+      sml::overload{
+        [](s1, e1) -> s2 { return {}; },
+        [](s2, e2) -> X  { return {}; },
+      },
+      sml::overload{
+        [](s3, e3) -> X  { return {}; },
+      }
     };
 
-    using dsl::X;
-    expect(sm.is("s1"_s, "s3"_s));
+    expect(sm.is<s1, s3>());
     expect(sm.process_event(e1{}));
-    expect(sm.is("s2"_s, "s3"_s));
+    expect(sm.is<s2, s3>());
     expect(sm.process_event(e2{}));
-    expect(sm.is(X, "s3"_s));
+    expect(sm.is<X, s3>());
     expect(sm.process_event(e3{}));
-    expect(sm.is(X, X));
+    expect(sm.is<X, X>());
   }
-
-  // dispatch_table
-  {
-    unsigned calls{};
-    auto guard = [] { return true; };
-    auto action = [&] { ++calls; };
-
-    sm sm = [=] {
-      using namespace dsl;
-      return dispatch_table{
-          event<e1>[guard] / action,
-          event<e2>[guard] / action,
-      };
-    };
-
-    using dsl::operator""_s;
-    expect(0 == calls);
-    expect(sm.process_event(e1{}));
-    expect(1 == calls);
-    expect(sm.process_event(e2{}));
-    expect(2 == calls);
-  }
+#endif
 
   // dependencies
   {
     struct s {
       bool value{};
-
-      constexpr auto operator()() const {
-        using namespace dsl;
-        auto guard = [this] { return value; };
-        return transition_table{
-            *"s1"_s + event<e1>[guard] = "s2"_s,
+      constexpr auto guard() { return value; };
+      constexpr auto operator()() {
+        return sml::overload{
+          [this](s1, e1) -> sml::maybe<s2> { if (guard()) return s2{}; return {}; },
         };
       }
     };
 
     {
-      s s{};
-      sm sm{s};
+      sml::sm sm{s{}};
       expect(not sm.process_event(e1{}));
-      expect(sm.is("s1"_s));
+      expect(sm.is<s1>());
     }
 
     {
       s s{true};
-      sm sm{s};
+      sml::sm sm{s};
       expect(sm.process_event(e1{}));
-      expect(sm.is("s2"_s));
+      expect(sm.is<s2>());
     }
   }
 
@@ -1130,38 +643,118 @@ static_assert(([] {
   {
     struct connect {};
     struct established {};
-    struct ping {};
+    struct ping { bool valid{true}; };
     struct disconnect {};
     struct timeout {};
 
-    struct Connection {
-      constexpr auto operator()() const {
-        constexpr auto establish = [] {};
-        constexpr auto close = [] {};
-        constexpr auto is_valid = [](auto const&) { return true; };
-        constexpr auto reset_timeout = [] {};
+    {
+      struct sm {
+        /// states
+        struct Disconnected {};
+        struct Connecting {};
+        struct Connected {};
 
-        using namespace sml::dsl;
-        return transition_table{
-            *"Disconnected"_s + event<connect> / establish = "Connecting"_s,
-             "Connecting"_s + event<established> = "Connected"_s,
-             "Connected"_s + event<ping>[is_valid] / reset_timeout,
-             "Connected"_s + event<timeout> / establish = "Connecting"_s,
-             "Connected"_s + event<disconnect> / close = "Disconnected"_s,
-        };
-      }
-    };
+        /// guards/actions
+        constexpr void establish(){}
+        constexpr void close(){}
+        constexpr void reset_timeout(){ }
 
-    sml::sm connection{Connection{}};
-    expect(connection.is("Disconnected"_s));
-    expect(connection.process_event(connect{}));
-    expect(connection.is("Connecting"_s));
-    expect(connection.process_event(established{}));
-    expect(connection.is("Connected"_s));
-    expect(connection.process_event(ping{}));
-    expect(connection.is("Connected"_s));
-    expect(connection.process_event(disconnect{}));
-    expect(connection.is("Disconnected"_s));
+        /// transitions
+        constexpr auto operator()() {
+          return sml::overload{
+            [this](Disconnected, connect)            -> Connecting   { establish(); return {}; },
+            [    ](Connecting,   established)        -> Connected    { return {}; },
+            [this](Connected,    const ping& event)                  { if (event.valid) { reset_timeout(); } },
+            [this](Connected,    timeout)            -> Connecting   { establish(); return {}; },
+            [this](Connected,    disconnect)         -> Disconnected { close(); return {}; },
+          };
+        }
+      };
+
+      sml::sm connection{sm{}};
+
+      struct empty{};
+      static_assert(sizeof(connection) == sizeof(empty));
+      expect(connection.is<sm::Disconnected>());
+      expect(connection.process_event(connect{}));
+      expect(connection.is<sm::Connecting>());
+      expect(connection.process_event(established{}));
+      expect(connection.is<sm::Connected>());
+      expect(connection.process_event(ping{.valid = true}));
+      expect(connection.is<sm::Connected>());
+      expect(connection.process_event(disconnect{}));
+      expect(connection.is<sm::Disconnected>());
+    }
+
+    #if __cpp_constexpr >= 202211L
+    {
+      struct sm {
+        /// states
+        struct Disconnected {};
+        struct Connecting {};
+        struct Connected {};
+
+        static constexpr void establish(){}
+        static constexpr void close(){}
+        static constexpr void reset_timeout(){ }
+
+        /// transitions
+        constexpr auto operator()() const {
+          return sml::overload{
+            [](Disconnected, connect)            -> Connecting   { establish(); return {}; },
+            [](Connecting,   established)        -> Connected    { return {}; },
+            [](Connected,    const ping& event)                  { if (event.valid) { reset_timeout(); } },
+            [](Connected,    timeout)            -> Connecting   { establish(); return {}; },
+            [](Connected,    disconnect)         -> Disconnected { close(); return {}; },
+          };
+        }
+      };
+
+      sml::sm connection{sm{}};
+
+      struct empty{};
+      static_assert(sizeof(connection) == sizeof(empty));
+      expect(connection.is<sm::Disconnected>());
+      expect(connection.process_event(connect{}));
+      expect(connection.is<sm::Connecting>());
+      expect(connection.process_event(established{}));
+      expect(connection.is<sm::Connected>());
+      expect(connection.process_event(ping{.valid = true}));
+      expect(connection.is<sm::Connected>());
+      expect(connection.process_event(disconnect{}));
+      expect(connection.is<sm::Disconnected>());
+    }
+
+    {
+      struct Disconnected {};
+      struct Connecting {};
+      struct Connected {};
+
+      static constexpr auto establish = []{};
+      static constexpr auto close = []{ };
+      static constexpr auto reset_timeout = []{ };
+
+      sml::sm connection = sml::overload{
+        [](Disconnected, connect)            -> Connecting   { establish(); return {}; },
+        [](Connecting,   established)        -> Connected    { return {}; },
+        [](Connected,    const ping& event)                  { if (event.valid) { reset_timeout(); } },
+        [](Connected,    timeout)            -> Connecting   { establish(); return {}; },
+        [](Connected,    disconnect)         -> Disconnected { close(); return {}; },
+      };
+
+      struct empty{};
+      static_assert(sizeof(connection) == sizeof(empty));
+      expect(connection.is<Disconnected>());
+      expect(connection.process_event(connect{}));
+      expect(connection.is<Connecting>());
+      expect(connection.process_event(established{}));
+      expect(connection.is<Connected>());
+      expect(connection.process_event(ping{.valid = true}));
+      expect(connection.is<Connected>());
+      expect(connection.process_event(disconnect{}));
+      expect(connection.is<Disconnected>());
+    }
+    #endif
   }
 }(), true));
 #endif // NTEST
