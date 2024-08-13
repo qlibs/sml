@@ -1,3 +1,4 @@
+#include <utility>
 // <!--
 // The MIT License (MIT)
 //
@@ -239,7 +240,7 @@ template<template <class...> class TList, class T> using apply_t = typename appl
 } // namespace mp
 namespace utility {
 template<class T> auto declval() -> T&&;
-template<class... Ts> requires (__is_empty(Ts) and ...)
+template<class... Ts> requires (__is_empty(Ts) and ...) and (sizeof...(Ts) < 255)
 struct variant {
   template<class T> constexpr variant(const T&)
     requires (type_traits::is_same_v<T, Ts> or ...)
@@ -251,11 +252,19 @@ struct variant {
   unsigned char index{};
 };
 
-template<class Fn, class... Ts>
-[[nodiscard]] constexpr auto visit(Fn fn, const variant<Ts...>& v) {
-  constexpr bool (*dispatch[])(Fn){[](Fn fn) { return fn(Ts{}); }...};
+inline constexpr auto if_else = []<class Fn, template<class...> class T, class... Ts>(Fn&& fn, const T<Ts...>& v) {
+  return [&]<auto... Ns>(std::index_sequence<Ns...>) {
+    return ([&] {
+      if (v.index == Ns) return fn(Ts{});
+      return false;
+    }() or ...);
+  }(std::make_index_sequence<sizeof...(Ts)>{});
+};
+
+inline constexpr auto jump_table = []<class Fn, template<class...> class T, class... Ts>(Fn&& fn, const T<Ts...>& v) {
+  static constexpr bool (*dispatch[])(Fn){[](Fn fn) { return fn(Ts{}); }...};
   return dispatch[v.index](fn);
-}
+};
 } // namespace utility
 
 template<class... Ts> struct overload : Ts... {
@@ -295,9 +304,9 @@ class sm {
  public:
   constexpr sm(const auto& t) : t_{t} { }
 
-  template<class TEvent> requires dispatchable<TEvent>
+  template<class TEvent, auto dispatch = utility::if_else> requires dispatchable<TEvent>
   constexpr auto process_event(const TEvent& event) -> bool {
-    return utility::visit([&](const auto& state) {
+    return dispatch([&](const auto& state) {
       if constexpr (requires { states_ = *t_()(state, event); }) {
         if (auto state_ = t_()(state, event); state_) {
           states_ = *state_;
@@ -316,8 +325,9 @@ class sm {
     }, states_);
   }
 
+  template<auto dispatch = utility::if_else>
   constexpr auto visit_states(auto&& fn) const {
-    return utility::visit(fn, states_);
+    return dispatch(fn, states_);
   };
 
  private:
