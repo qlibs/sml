@@ -45,10 +45,9 @@
 
 - C++20 ([Clang-15+, GCC-12+](https://en.cppreference.com/w/cpp/compiler_support))
 
-  - No dependencies (Neither `Boost` nor `STL` is required)
+  - No dependencies (no #include/#import)
   - No `virtual` used (-fno-rtti)
   - No `exceptions` required (-fno-exceptions)
-  - `static_assert(1u == sizeof(State Machine))`
 
 ---
 
