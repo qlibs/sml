@@ -130,17 +130,29 @@ main: // $CXX -O3 -fno-exceptions -fno-rtti
 ### API
 
 ```cpp
-struct X {}; // terminate state
-template<class... Ts> struct overload;
+namespace sml {
+  struct X {}; // terminate state
+  template<class... Ts> struct overload;
+}
 ```
 
 ```cpp
-template<class T> struct sm {
-  constexpr sm(T&&);
-  template<class TEvent> requires dispatchable<TEvent>
-  constexpr auto process_event(const TEvent& event) -> bool ;
-  constexpr auto visit_states(auto&& fn) const;
-};
+namespace sml {
+  template<class T> struct sm {
+    constexpr sm(T&&);
+    template<class TEvent, auto dispatch = utility::if_else>
+      requires dispatchable<TEvent>
+    constexpr auto process_event(const TEvent& event) -> bool ;
+    constexpr auto visit_states(auto&& fn) const;
+  };
+}
+```
+
+```cpp
+namespace sml::utility {
+  inline constexpr auto if_else;    // if_else dispatch policy
+  inline constexpr auto jump_table; // jump_table dispatch policy
+}
 ```
 
 ---
