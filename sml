@@ -54,7 +54,7 @@
 
 ### Overview
 
-<p align="center"><img width="100%" height="250px" src="https://www.planttext.com/api/plantuml/png/VP312eD034Jl-OhqMh2zzr24zYz4ojOD6bYZkD7lRxHrKP3kBSoRcMJpg6xGiGrOTI9KANTowQM6apRK4lR1iO2o1i978W0GYtE9wMNP7PySVndaJT-EYxxQfPuTjxKGhqYsn3jmRCosepOs2_dQ4hoqxDGZl9-J2kJucbnWZwNr3HH9_vZJYiejTUCXkZlFK9zcW9p4svV21m00" /></p>
+<p align="center"><img src="https://www.planttext.com/api/plantuml/png/RP313e9034Jl_OfwDK7l7Wo9_WKXPc4RQB8KmXQ-twAoIcHlpRoPQJUFwaQTke1rBqArSY-dGHeuQ4iTuSpLw4H1MGFXBJ40YCMnnFIox8ftZfyKygR_ZcZowfPcCLpMHZmZsHPLuDYQQqDzNHRnTYNsrR5HT-XXoIcGusDsWJsMrZPI9FtpxYoet54_xQARsmprQGR8IRpzA3m1" /></p>
 
 > State Machine (https://godbolt.org/z/Yq7q3rhf7)
 
