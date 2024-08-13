@@ -178,6 +178,7 @@ struct X {}; // terminate state
 #endif
 
 #pragma once
+#pragma GCC system_header
 
 namespace sml::inline v3_0_0 {
 using size_t = decltype(sizeof(int));
@@ -195,15 +196,6 @@ template<class T> struct remove_cv<volatile T> { using type = T; };
 template<class T> struct remove_cv<const volatile T> { using type = T; };
 template<class T> using remove_cv_t = typename remove_cv<T>::type;
 template<class T> using remove_cvref_t = remove_cv_t<remove_reference_t<T>>;
-namespace detail {
-template<bool> struct conditional;
-template<> struct conditional<false> { template<class, class T> using fn = T; };
-template<> struct conditional<true>  { template<class T, class> using fn = T; };
-} // namespace detail
-template<bool B, class T, class F>
-struct conditional { using type = typename detail::conditional<B>::template fn<T, F>; };
-template<bool B, class T, class F>
-using conditional_t = typename detail::conditional<B>::template fn<T, F>;
 template<class> struct transition_traits;
 template<class T> requires requires { &T::operator(); }
 struct transition_traits<T> : transition_traits<decltype(&T::operator())> { };
@@ -222,27 +214,6 @@ template<class T, class TSrc, class TEvent, class TDst> struct transition_traits
   using dst = remove_cvref_t<TDst>;
 };
 } // namespace type_traits
-namespace mp {
-template<class...> struct type_list {};
-template<class... Ts> struct inherit : Ts... {};
-template<class T> struct wrapper { [[no_unique_address]] T t; constexpr auto operator()() const { return t; } };
-template<class...> struct unique;
-template<class T, class... Ts, class... Rs>
-struct unique<type_list<T, Ts...>, inherit<Rs...>> :
-  type_traits::conditional_t<
-    type_traits::is_same_v<T, void> or
-    type_traits::is_same_v<T, type_traits::none> or
-    __is_base_of(wrapper<T>, inherit<wrapper<Rs>...>),
-    unique<type_list<Ts...>, inherit<Rs...>>,
-    unique<type_list<Ts...>, inherit<Rs..., T>>
-  > { };
-template<class... Rs> struct unique<type_list<>, inherit<Rs...>> { using type = type_list<Rs...>; };
-template<class... Ts> using unique_t = typename unique<type_list<Ts...>, inherit<>>::type;
-template<template <class...> class, class> struct apply;
-template<template <class...> class TList, template <class...> class T, class... Ts>
-struct apply<TList, T<Ts...>> { using type = TList<Ts...>; };
-template<template <class...> class TList, class T> using apply_t = typename apply<TList, T>::type;
-} // namespace mp
 namespace utility {
 template<class T> auto declval() -> T&&;
 template<class T, T...> struct integer_sequence { };
@@ -253,7 +224,45 @@ template<size_t N> using make_index_sequence =
 #else
    index_sequence<__integer_pack(N)...>;
 #endif
+template<class T> struct wrapper {
+  [[no_unique_address]] T t;
+  constexpr auto operator()() const { return t; }
+};
 } // namespace utility
+namespace mp {
+template<class...> struct type_list {};
+using info = const size_t*;
+template<info> struct meta_type { constexpr auto friend get(meta_type); };
+template<class T> struct meta_info {
+  using value_type = T;
+  static constexpr size_t id{};
+  constexpr auto friend get(meta_type<&id>) { return meta_info{}; }
+};
+template<class T> inline constexpr auto meta = &meta_info<T>::id;
+template<info meta> using type_of = typename decltype(get(meta_type<meta>{}))::value_type;
+template<template<class...> class T, const auto& v>
+constexpr auto apply() {
+  return []<size_t... Ns>(utility::index_sequence<Ns...>) {
+    return T<type_of<v[Ns]>...>{};
+  }(utility::make_index_sequence<v.size()>{});
+}
+template<template<class...> class T, const auto& v>
+using apply_t = decltype(apply<T, v>());
+} // namespace mp
+
+template<class T, size_t N>
+struct static_vector {
+  constexpr static_vector() = default;
+  constexpr auto push_back(const T& value) { values_[size_++] = value; }
+  [[nodiscard]] constexpr const auto& operator[](auto i) const { return values_[i]; }
+  [[nodiscard]] constexpr auto begin() const { return &values_[0]; }
+  [[nodiscard]] constexpr auto end() const { return &values_[0] + size_; }
+  [[nodiscard]] constexpr auto size() const { return size_; }
+  [[nodiscard]] constexpr auto empty() const { return not size_; }
+  [[nodiscard]] constexpr auto capacity() const { return N; }
+  T values_[N]{};
+  size_t size_{};
+};
 
 template<class... Ts>
   requires (__is_empty(Ts) and ...) and (sizeof...(Ts) < (1u << __CHAR_BIT__))
@@ -290,20 +299,29 @@ template<class... Ts> overload(Ts...) -> overload<Ts...>;
 template<class T>
   requires (requires (T t) { t(); })
 class sm {
-  template<class... Ts> static auto unique_states(mp::type_list<Ts...>) ->
-    mp::unique_t<typename type_traits::transition_traits<Ts>::src...,
-                 typename type_traits::transition_traits<Ts>::dst...>;
-
-  using states = decltype(unique_states(typename decltype(utility::declval<T>()())::value_type{}));
-  using initial_state = decltype( // first state
-    []<class TState, class... TStates>(mp::type_list<TState, TStates...>) { return TState{}; }(states{})
-  );
+  template<class TState>
+  static constexpr auto add_state(auto& states, mp::type_list<TState>) {
+    const auto new_state = mp::meta<TState>;
+    if (new_state == mp::meta<void> or new_state == mp::meta<type_traits::none>) return;
+    for (const auto& state : states) if (state == new_state) return;
+    states.push_back(new_state);
+  }
+  template<template<class...> class TList, class... Ts>
+  static constexpr auto add_state(auto& states, mp::type_list<TList<Ts...>>) {
+    (add_state(states, mp::type_list<Ts>{}), ...);
+  }
+  static constexpr auto states = []<class... Ts>(mp::type_list<Ts...>) {
+    static_vector<mp::info, 2u * sizeof...(Ts)> states{};
+    (add_state(states, mp::type_list<typename type_traits::transition_traits<Ts>::src>{}), ...);
+    (add_state(states, mp::type_list<typename type_traits::transition_traits<Ts>::dst>{}), ...);
+    return states;
+  }(typename decltype(utility::declval<T>()())::value_type{});
 
   template<class TEvent>
   static constexpr auto dispatchable =
     []<class... TStates>(mp::type_list<TStates...>) {
-      return (requires { utility::declval<T>()()(utility::declval<TStates&>(), utility::declval<TEvent>()); } or ...);
-    }(states{});
+      return (requires(T t, TStates state, TEvent event) { t()(state, event); } or ...);
+    }(mp::apply_t<mp::type_list, states>{});
 
  public:
   constexpr sm(const auto& t) : t_{t} { }
@@ -335,10 +353,10 @@ class sm {
 
  private:
   [[no_unique_address]] T t_{};
-  [[no_unique_address]] mp::apply_t<variant, states> states_ = initial_state{};
+  [[no_unique_address]] mp::apply_t<variant, states> states_ = mp::type_of<states[0u]>{};
 };
 template<class T> requires requires (T t) { t(); } sm(T) -> sm<T>;
-template<class T> sm(T) -> sm<mp::wrapper<T>>;
+template<class T> sm(T) -> sm<utility::wrapper<T>>;
 struct X {}; // terminate state
 } // namespace sml
 
@@ -364,19 +382,6 @@ static_assert(([] {
   struct e3 {};
   struct e { int value{}; };
   struct unexpected {};
-
-  // sml::mp
-  {
-    using sml::mp::type_list;
-    using sml::type_traits::is_same_v;
-
-    // unique_t
-    {
-      static_assert(is_same_v<type_list<int>, sml::mp::unique_t<int>>);
-      static_assert(is_same_v<type_list<int, double>, sml::mp::unique_t<int, double>>);
-      static_assert(is_same_v<type_list<int>, sml::mp::unique_t<int, int>>);
-    }
-  }
 
   // sml::sm::process_event
   {
