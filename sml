@@ -89,19 +89,19 @@ int main() {
 
   static_assert(sizeof(connection) == 1u);
 
-  assert(connection.visit_states(is<Disconnected>));
+  assert(connection.visit(is<Disconnected>));
 
   assert(connection.process_event(connect{}));
-  assert(connection.visit_states(is<Connecting>));
+  assert(connection.visit(is<Connecting>));
 
   assert(connection.process_event(established{}));
-  assert(connection.visit_states(is<Connected>));
+  assert(connection.visit(is<Connected>));
 
   assert(connection.process_event(ping{.valid = true}));
-  assert(connection.visit_states(is<Connected>));
+  assert(connection.visit(is<Connected>));
 
   assert(connection.process_event(disconnect{}));
-  assert(connection.visit_states(is<Disconnected>));
+  assert(connection.visit(is<Disconnected>));
 }
 ```
 
@@ -139,7 +139,7 @@ struct sm {
   template<class TEvent, auto dispatch = if_else>
     requires dispatchable<TEvent>
   constexpr auto process_event(const TEvent& event) -> bool ;
-  constexpr auto visit_states(auto&& fn) const;
+  constexpr auto visit(auto&& fn) const;
 };
 ```
 
@@ -355,7 +355,7 @@ class sm {
     }, states_);
   }
 
-  template<auto dispatch = if_else> constexpr auto visit_states(auto&& fn) const {
+  template<auto dispatch = if_else> constexpr auto visit(auto&& fn) const {
     return dispatch(fn, states_);
   };
 
@@ -372,7 +372,7 @@ struct X {}; // terminate state
 static_assert(([] {
   constexpr auto expect = [](bool cond) { if (not cond) { void failed(); failed(); } };
   constexpr auto is = []<class... TStates>(const auto& sm, sml::mp::type_list<TStates...>) {
-    return sm.visit_states([&]<class TState>(const TState&) {
+    return sm.visit([&]<class TState>(const TState&) {
       return (sml::type_traits::is_same_v<TStates, TState> and ...);
     });
   };
