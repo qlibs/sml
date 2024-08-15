@@ -80,11 +80,11 @@ int main() {
 
   // transitions
   sml::sm connection = sml::overload{
-    [](Disconnected, connect)     -> Connecting   { establish(); },
-    [](Connecting,   established) -> Connected    { },
-    [](Connected,    ping event)                  { if (event.valid) { reset(); } },
-    [](Connected,    timeout)     -> Connecting   { establish(); },
-    [](Connected,    disconnect)  -> Disconnected { close(); },
+    [](Disconnected, connect)           -> Connecting   { establish(); },
+    [](Connecting,   established)       -> Connected    { },
+    [](Connected,    const ping& event)                 { if (event.valid) { reset(); } },
+    [](Connected,    timeout)           -> Connecting   { establish(); },
+    [](Connected,    disconnect)        -> Disconnected { close(); },
   };
 
   static_assert(sizeof(connection) == 1u);
@@ -226,7 +226,7 @@ template<size_t N> using make_index_sequence =
 #endif
 template<class T> struct wrapper {
   [[no_unique_address]] T t;
-  constexpr auto operator()() const { return t; }
+  constexpr const auto& operator()() const { return t; }
 };
 } // namespace utility
 namespace mp {
@@ -267,15 +267,30 @@ struct static_vector {
 template<class... Ts>
   requires (__is_empty(Ts) and ...) and (sizeof...(Ts) < (1u << __CHAR_BIT__))
 struct variant {
-  constexpr variant() = default;
-  template<class T> constexpr variant(const T&)
-    requires (type_traits::is_same_v<T, Ts> or ...)
-    : index{[]() -> decltype(index) {
-        bool match[]{type_traits::is_same_v<Ts, T>...};
-        for (auto i = 0u; i < sizeof...(Ts); ++i) if (match[i]) return i;
-        return {};
-      }()} { }
-  unsigned char index{};
+  template<class T> static constexpr auto id = [] {
+    const bool match[]{type_traits::is_same_v<Ts, T>...};
+    for (auto i = 0; i < sizeof...(Ts); ++i) if (match[i]) return i;
+    return -1;
+  }();
+
+  constexpr variant() noexcept = default;
+  template<class T> constexpr variant(const T& t) noexcept : index{id<T>} { }
+
+  template<class T> constexpr auto reset(const T&) noexcept requires (type_traits::is_same_v<T, Ts> or ...) {
+    index = id<T>;
+    return true;
+  }
+
+  template<class... TArgs> requires ([]<class T> { return (type_traits::is_same_v<T, TArgs> or ...); }.template operator()<Ts>() or ...)
+  constexpr auto reset(const variant<TArgs...>& other) noexcept {
+    if (other.index != -1) {
+      index = other.index;
+      return true;
+    }
+    return false;
+  }
+
+  char index{-1};
 };
 
 inline constexpr auto if_else = []<class Fn, template<class...> class T, class... Ts>(Fn&& fn, const T<Ts...>& v) {
@@ -287,7 +302,7 @@ inline constexpr auto if_else = []<class Fn, template<class...> class T, class..
   }(utility::make_index_sequence<sizeof...(Ts)>{});
 };
 inline constexpr auto jmp_table = []<class Fn, template<class...> class T, class... Ts>(Fn&& fn, const T<Ts...>& v) {
-  static constexpr bool (*dispatch[])(Fn){[](Fn fn) { return fn(Ts{}); }...};
+  static constexpr bool (*dispatch[])(Fn){[](Fn) { return false; }, [](Fn fn) { return fn(Ts{}); }...};
   return dispatch[v.index](fn);
 };
 template<class... Ts> struct overload : Ts... {
@@ -315,7 +330,7 @@ class sm {
     (add_state(states, mp::type_list<typename type_traits::transition_traits<Ts>::src>{}), ...);
     (add_state(states, mp::type_list<typename type_traits::transition_traits<Ts>::dst>{}), ...);
     return states;
-  }(typename decltype(utility::declval<T>()())::value_type{});
+  }(typename type_traits::remove_cvref_t<decltype(utility::declval<T>()())>::value_type{});
 
   template<class TEvent>
   static constexpr auto dispatchable =
@@ -329,15 +344,8 @@ class sm {
   template<class TEvent, auto dispatch = if_else> requires dispatchable<TEvent>
   constexpr auto process_event(const TEvent& event) -> bool {
     return dispatch([&](const auto& state) {
-      if constexpr (requires { states_ = *t_()(state, event); }) {
-        if (auto state_ = t_()(state, event); state_) {
-          states_ = *state_;
-          return true;
-        }
-        return false;
-      } else if constexpr (requires { states_ = t_()(state, event); }) {
-        states_ = t_()(state, event);
-        return true;
+      if constexpr (requires { states_.reset(t_()(state, event)); }) {
+        return states_.reset(t_()(state, event));
       } else if constexpr (requires { t_()(state, event); }) {
         t_()(state, event);
         return true;
@@ -586,27 +594,24 @@ static_assert(([] {
   }
 
   // transition_table[guards/actions]
-  //{
-    //unsigned calls{};
+  {
+    unsigned calls{};
 
-    //auto guard = [](const auto& event) { return event.value; };
-    //auto action = [&] { ++calls; };
+    sml::sm sm = sml::overload{
+      [&](s1, const e& event) -> sml::variant<s1, s2> {
+        if (event.value) {
+          ++calls;
+          return s2{};
+        }
+        return {};
+      },
+    };
 
-    //sml::sm sm = sml::overload{
-      //[&](s1, const e& event) -> sml::variant<s2> {
-        //if (guard(event)) {
-          //action();
-          //return s2{};
-        //}
-        //return {};
-      //},
-    //};
-
-    //expect(not sm.process_event(e{false}));
-    //expect(is(sm, sml::mp::type_list<s1>{}));
-    //expect(sm.process_event(e{true}));
-    //expect(is(sm, sml::mp::type_list<s2>{}));
-  //}
+    expect(not sm.process_event(e{false}));
+    expect(is(sm, sml::mp::type_list<s1>{}));
+    expect(sm.process_event(e{true}));
+    expect(is(sm, sml::mp::type_list<s2>{}));
+  }
 
 #if 0
   // transition_table[process]
