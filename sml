@@ -80,11 +80,11 @@ int main() {
 
   // transitions
   sml::sm connection = sml::overload{
-    [](Disconnected, connect)           -> Connecting   { establish(); },
-    [](Connecting,   established)       -> Connected    { },
-    [](Connected,    const ping& event)                 { if (event.valid) { reset(); } },
-    [](Connected,    timeout)           -> Connecting   { establish(); },
-    [](Connected,    disconnect)        -> Disconnected { close(); },
+    [](Disconnected, const connect&)      -> Connecting   { establish(); },
+    [](Connecting,   const established&)  -> Connected    { },
+    [](Connected,    const ping& event)                   { if (event.valid) { reset(); } },
+    [](Connected,    const timeout&)      -> Connecting   { establish(); },
+    [](Connected,    const disconnect&)   -> Disconnected { close(); },
   };
 
   static_assert(sizeof(connection) == 1u);
@@ -154,21 +154,22 @@ struct X {}; // terminate state
 
 ### FAQ
 
-- How to integrate with CMake/CPM?
+- How to integrate with [CMake.FetchContent](https://cmake.org/cmake/help/latest/module/FetchContent.html)?
 
     ```
-    CPMAddPackage(
-      Name sml
-      GITHUB_REPOSITORY qlibs/sml
+    include(FetchContent)
+
+    FetchContent_Declare(
+      qlibs.sml
+      GIT_REPOSITORY https://github.com/qlibs/sml
       GIT_TAG v3.0.0
     )
-    add_library(sml INTERFACE)
-    target_include_directories(sml SYSTEM INTERFACE ${sml_SOURCE_DIR})
-    add_library(qlibs::sml ALIAS sml)
+
+    FetchContent_MakeAvailable(qlibs.sml)
     ```
 
     ```
-    target_link_libraries(${PROJECT_NAME} qlibs::sml);
+    target_link_libraries(${PROJECT_NAME} PUBLIC qlibs.sml);
     ```
 
 - Acknowledgments
