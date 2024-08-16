@@ -175,6 +175,9 @@ struct X {}; // terminate state
 - Acknowledgments
 
   > https://www.youtube.com/watch?v=Zb6xcd2as6o
+
+- Similar projects?
+    > [boost.msm](https://github.com/boostorg/msm), [boost.statechart](https://github.com/boostorg/statechart), [boost-ext.sml](https://github.com/boost-ext/sml)
 <!--
 #endif
 
