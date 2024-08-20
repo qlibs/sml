@@ -28,8 +28,8 @@
 ## SML: UML-2.5 State Machine Language
 
 [![MIT Licence](http://img.shields.io/badge/license-MIT-blue.svg)](https://opensource.org/license/mit)
-[![Version](https://badge.fury.io/gh/qlibs%2Fut.svg)](https://github.com/qlibs/sml/releases)
-[![build](https://img.shields.io/badge/build-blue.svg)](https://godbolt.org/z/Gcfncoo6r)
+[![Version](https://img.shields.io/github/v/release/qlibs/sml)](https://github.com/qlibs/sml/releases)
+[![Build](https://img.shields.io/badge/build-green.svg)](https://godbolt.org/z/Gcfncoo6r)
 [![Try it online](https://img.shields.io/badge/try%20it-online-blue.svg)](https://godbolt.org/z/s9a6EW5j9)
 
   > https://en.wikipedia.org/wiki/Finite-state_machine
