@@ -80,11 +80,11 @@ int main() {
 
   // transitions
   sml::sm connection = sml::overload{
-    [](Disconnected, const connect&)      -> Connecting   { establish(); },
-    [](Connecting,   const established&)  -> Connected    { },
-    [](Connected,    const ping& event)                   { if (event.valid) { reset(); } },
-    [](Connected,    const timeout&)      -> Connecting   { establish(); },
-    [](Connected,    const disconnect&)   -> Disconnected { close(); },
+    [](Disconnected, connect)      -> Connecting   { establish(); },
+    [](Connecting,   established)  -> Connected    { },
+    [](Connected,    ping event)                   { if (event.valid) { reset(); } },
+    [](Connected,    timeout)      -> Connecting   { establish(); },
+    [](Connected,    disconnect)   -> Disconnected { close(); },
   };
 
   static_assert(sizeof(connection) == 1u);
