@@ -32,9 +32,7 @@
 [![Build](https://img.shields.io/badge/build-green.svg)](https://godbolt.org/z/Gcfncoo6r)
 [![Try it online](https://img.shields.io/badge/try%20it-online-blue.svg)](https://godbolt.org/z/s9a6EW5j9)
 
-  > https://en.wikipedia.org/wiki/Finite-state_machine
-
-  > https://www.omg.org/spec/UML/2.5.1
+  > https://en.wikipedia.org/wiki/Finite-state_machine | https://www.omg.org/spec/UML/2.5.1
 
 ### Features
 
