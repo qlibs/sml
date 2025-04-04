@@ -36,7 +36,7 @@
 
 ### Features
 
-- Single header (https://raw.githubusercontent.com/qlibs/sml/main/sml - for integration see [FAQ](#faq))
+- Single header (https://raw.githubusercontent.com/qlibs/sml/main/sml)
 - Verifies itself upon include (can be disabled with `-DNTEST` - see [FAQ](#faq))
 - Optimized run-time execution, binary size, compilation-times (see [performance](https://godbolt.org/z/W9rP94cYK))
 - Minimal [API](#api)
@@ -151,24 +151,6 @@ struct X {}; // terminate state
 ---
 
 ### FAQ
-
-- How to integrate with [CMake.FetchContent](https://cmake.org/cmake/help/latest/module/FetchContent.html)?
-
-    ```
-    include(FetchContent)
-
-    FetchContent_Declare(
-      qlibs.sml
-      GIT_REPOSITORY https://github.com/qlibs/sml
-      GIT_TAG v3.0.0
-    )
-
-    FetchContent_MakeAvailable(qlibs.sml)
-    ```
-
-    ```
-    target_link_libraries(${PROJECT_NAME} PUBLIC qlibs.sml);
-    ```
 
 - Acknowledgments
 
