@@ -23,7 +23,7 @@
 //
 #if 0
 // -->
-[Overview](#Overview) / [Examples](#Examples) / [API](#API) / [FAQ](#FAQ)
+[Overview](#Overview) / [Examples](#Examples) / [API](#API) / [FAQ](#FAQ) / [Resources](#Resources)
 
 ## SML: UML-2.5 State Machine Language
 
@@ -32,11 +32,11 @@
 [![Build](https://img.shields.io/badge/build-green.svg)](https://godbolt.org/z/Gcfncoo6r)
 [![Try it online](https://img.shields.io/badge/try%20it-online-blue.svg)](https://godbolt.org/z/s9a6EW5j9)
 
-  > https://en.wikipedia.org/wiki/Finite-state_machine | https://www.omg.org/spec/UML/2.5.1
+  > https://en.wikipedia.org/wiki/Finite-state_machine
 
 ### Features
 
-- Single header (https://raw.githubusercontent.com/qlibs/sml/main/sml)
+- Single header (https://raw.githubusercontent.com/qlibs/sml/main/sml) / C++20 module (https://raw.githubusercontent.com/qlibs/sml/main/sml.cppm)
 - Verifies itself upon include (can be disabled with `-DNTEST` - see [FAQ](#faq))
 - Optimized run-time execution, binary size, compilation-times (see [performance](https://godbolt.org/z/W9rP94cYK))
 - Minimal [API](#api)
@@ -121,11 +121,7 @@ main: // $CXX -O3 -fno-exceptions -fno-rtti
 .L.str.10: .asciz  "close"
 ```
 
----
-
 ### Examples
-
---
 
 ### API
 
@@ -148,16 +144,25 @@ inline constexpr auto jmp_table; // jmp_table dispatch policy
 struct X {}; // terminate state
 ```
 
----
-
 ### FAQ
 
-- Acknowledgments
+> - How to disable running tests at compile-time?
+>
+>   When `-DNTEST` is defined static_asserts tests wont be executed upon include.
+>   Note: Use with caution as disabling tests means that there are no gurantees upon include that given compiler/env combination works as expected.
+>
+> - Similar projects?
+>   [boost.msm](https://github.com/boostorg/msm), [boost.statechart](https://github.com/boostorg/statechart), [boost-ext.sml](https://github.com/boost-ext/sml)
 
-  > https://www.youtube.com/watch?v=Zb6xcd2as6o
+### Resources
 
-- Similar projects?
-    > [boost.msm](https://github.com/boostorg/msm), [boost.statechart](https://github.com/boostorg/statechart), [boost-ext.sml](https://github.com/boost-ext/sml)
+> - https://www.omg.org/spec/UML/2.5.1
+> - https://www.youtube.com/watch?v=Zb6xcd2as6o
+
+### License
+
+> - [MIT](LICENSE)
+
 <!--
 #endif
 
