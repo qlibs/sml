@@ -156,8 +156,8 @@ struct X {}; // terminate state
 
 ### Resources
 
-> - https://www.omg.org/spec/UML/2.5.1
-> - https://www.youtube.com/watch?v=Zb6xcd2as6o
+> - UML-2.5.1 - https://www.omg.org/spec/UML/2.5.1
+> - Rise of the State Machines - https://www.youtube.com/watch?v=Zb6xcd2as6o
 
 ### License
 
