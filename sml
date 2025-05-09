@@ -25,10 +25,7 @@
 // -->
 [Overview](#Overview) / [Examples](#Examples) / [API](#API) / [FAQ](#FAQ) / [Resources](#Resources)
 
-> [!WARNING]
-> `WORK IN PROGRESS`
-
-## SML: UML-2.5 State Machine Language
+## `sml`: UML-2.5 State Machine Language
 
 [![MIT Licence](http://img.shields.io/badge/license-MIT-blue.svg)](https://opensource.org/license/mit)
 [![Version](https://img.shields.io/github/v/release/qlibs/sml)](https://github.com/qlibs/sml/releases)
